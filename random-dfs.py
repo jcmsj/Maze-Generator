@@ -20,6 +20,8 @@ class Direction(Enum):
                 return Direction.WEST
             case Direction.SOUTH:
                 return Direction.NORTH
+            case _:
+                raise Exception("Invalid Direction")
             
     def show(self) -> str:
         match self:
@@ -31,6 +33,8 @@ class Direction(Enum):
                 return 'E'
             case Direction.SOUTH:
                 return 'S'
+            case _:
+                raise Exception("Invalid Direction")
 DIRECTIONS = list(Direction)
 
 class State(Enum):
@@ -40,46 +44,55 @@ class State(Enum):
 
 class Cell:
     def __init__(self, x:int, y:int ) -> None:
-        self.x = x
-        self.y = y
+        self.X = x
+        self.Y = y
         self.walls = {d:State.UNVISITED for d in DIRECTIONS}
         self.visited = False
 
     def __repr__(self) -> str:
-        return f'C({self.x},{self.y})'
+        return f'C({self.X},{self.Y})'
     
+def init_cells(length: int, width: int):
+    return [[Cell(x,y) for x in range(width)] for y in range(length)]
+
+def block_edges(cell:Cell, length:int, width:int):
+    """Sets the walls of a Cell in some directions as Blocked if it is an edge"""
+    if cell.X == 0:
+        cell.walls[Direction.WEST] = State.BLOCKED
+    elif cell.X == width-1:
+        cell.walls[Direction.EAST] = State.BLOCKED
+
+    if cell.Y == 0:
+        cell.walls[Direction.NORTH] = State.BLOCKED
+    elif cell.Y==length-1:
+        cell.walls[Direction.SOUTH] = State.BLOCKED
+
+    return cell
+
+def make_initial_maze(length: int, width: int):
+    return [[block_edges(Cell(x, y), length=length, width=width) for x in range(width)] for y in range(length)]
+
+def random_cell(maze:list[list[Cell]]):
+    width = len(maze[0])
+    length = len(maze)
+    X = random.randint(0, width-1)
+    Y = random.randint(0, length-1)
+    return maze[Y][X]
+
 def random_dfs(length:int, width:int):
-    maze = [[Cell(x,y) for x in range(width)] for y in range(length)]
+    """A generator function for maze creation using Random Depth-First Search. 
+    Calling __next__ the first time returns a tuple containing the STARTING and ENDING cell. Further calls returns the same maze and path"""
+    maze = make_initial_maze(length, width)
     stack = []
     # (1) Choose the initial cell, mark it as visited and push it to the stack
-    start_x = random.randint(0, width-1)
-    start_y = random.randint(0, length-1)
-    starting_cell = maze[start_y][start_x]
-    starting_cell.visited = True
-    stack.append(starting_cell)
-
-    end_x = random.randint(0, width-1)
-    end_y = random.randint(0, length-1)
-    print(f"Starting at {starting_cell}")
-    path = []
-
-    def _show_maze():
-        show_maze(maze, (start_x,start_y), (end_x, end_y))
-
-    def _block_edges(cell:Cell):
-        if cell.x == 0:
-            cell.walls[Direction.WEST] = State.BLOCKED
-        elif cell.x == width-1:
-            cell.walls[Direction.EAST] = State.BLOCKED
-
-        if cell.y == 0:
-            cell.walls[Direction.NORTH] = State.BLOCKED
-        elif cell.y==length-1:
-            cell.walls[Direction.SOUTH] = State.BLOCKED
+    STARTING_CELL = random_cell(maze)
+    ENDING_CELL = random_cell(maze)
+    stack.append(STARTING_CELL)
+    yield STARTING_CELL, ENDING_CELL
+    path = [STARTING_CELL]
 
     while len(stack):
         current:Cell = stack.pop()
-        _block_edges(current)
         open_list = [dir for dir, state in current.walls.items() if state == State.UNVISITED]
         if len(open_list) == 0:
             continue
@@ -88,7 +101,7 @@ def random_dfs(length:int, width:int):
         direction = random.choice(open_list)
  
         # Get the cell at the given direction
-        chosen: Cell = maze[current.y+direction.value[1]][current.x+direction.value[0]]
+        chosen: Cell = maze[current.Y+direction.value[1]][current.X+direction.value[0]]
         # (2.1) If the current cell has any unvisited neighbours
         if chosen.visited:
             continue
@@ -105,19 +118,13 @@ def random_dfs(length:int, width:int):
         # Note the path
         path.append(direction.show())
         path.append(chosen)
-       
-        # Every iteration, print the maze
-        # _show_maze()
+        yield maze, path
 
-        # input() # To pause the execution
-    _show_maze()
     return maze, path
 
-def show_maze(maze:list[list[Cell]], start:tuple[int, int], end: tuple[int, int]):
+def show_maze(maze:list[list[Cell]], start_cell:Cell, ending_cell: Cell):
     length = len(maze)
     width = len(maze[0])
-    starting_cell = maze[start[1]][start[0]]
-    ending_cell = maze[end[1]][end[0]]
     for y in range(length):
         for x in range(width):
             cell = maze[y][x]
@@ -128,7 +135,7 @@ def show_maze(maze:list[list[Cell]], start:tuple[int, int], end: tuple[int, int]
         print('+')
         for x in range(width):
             cell = maze[y][x]
-            if cell == starting_cell:
+            if cell == start_cell:
                 if cell.walls[Direction.WEST] == State.VISITED:
                     print("  ⬤ ", end="")
                 else:
@@ -151,9 +158,18 @@ def main():
     '''Run if main module'''
     length = int(input("Enter length:"))
     width = int(input("Enter width:"))
-    maze,path = random_dfs(length=length,width=width)
-    # print(" -> ".join([str(p) for p in path]))
-    # Show the maze as an actual maze
+
+    maze_generator = random_dfs(length=length,width=width)
+    STARTING_CELL,ENDING_CELL = maze_generator.__next__()
+    print(f"Starting at {STARTING_CELL}")
+    print(f"Ending cell {ENDING_CELL}")
+    final_maze = None
+    final_path = None
+    for maze, path in maze_generator:
+        final_maze = maze
+        final_path = path
+    show_maze(final_maze, STARTING_CELL, ENDING_CELL)
+    print(" -> ".join([str(p) for p in path]))
 
 if __name__ == '__main__':
     main()
