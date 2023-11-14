@@ -176,10 +176,34 @@ def show_maze(maze:list[list[Cell]], start_cell:Cell, ending_cell: Cell):
     print("+---"*width, end="")
     print('+')
 
-def export_file(maze: dict[str,list[str]], path:str):
+def export_file(maze: dict[str,list[str]], solution:list[Cell|str], startEnd:tuple[Cell,Cell], filepath:str):
     import json
-    with open(path, 'w') as f:
-        json.dump(maze, f, indent=2)
+    with open(filepath, 'w') as f:
+        json.dump({
+            "start": str(startEnd[0]),
+            "maze": maze,
+            "solution": [str(path) for path in solution],
+            "end": str(startEnd[1])
+        }, f, indent=2)
+
+def as_matrix(adjacency_list: dict[Cell, list[Cell]]):
+    """Converts an adjacency list of Cells to a matrix"""
+    # Get the length and width of the maze
+    length = max([cell.Y for cell in adjacency_list.keys()]) + 1
+    width = max([cell.X for cell in adjacency_list.keys()]) + 1
+    # Initialize the matrix
+    matrix = [[Cell(x,y) for x in range(width)] for y in range(length)]
+    # Fill the matrix with the cells from the adjacency list
+    for cell, neighbors in adjacency_list.items():
+        matrix[cell.Y][cell.X] = cell
+        cell.walls = {direction:State.UNVISITED for direction in DIRECTIONS}
+        for neighbor in neighbors:
+            # Get the direction of the neighbor
+            direction = Direction((neighbor.X - cell.X, neighbor.Y - cell.Y))
+            cell.walls[direction] = State.VISITED
+        block_edges(cell, length, width)
+
+    return matrix
 
 def adjacency_list(maze: list[list[Cell]]):
     length = len(maze)
@@ -201,63 +225,64 @@ def import_file(path:str):
     with open(path, 'r') as f:
         return json.load(f)
 
-def import_adjacency_list(path:str):
-    import re
-    raw:dict[str, list[str]] = import_file(path)
+def import_maze_details(path:str):
+    raw = import_file(path)
+    maze: dict[str, list[str]] = raw['maze']
+    start = raw['start']
+    end = raw['end']
+    solution = raw['solution']
     adj_list:dict[Cell, list[Cell]] = {}
 
-    converted_nodes:dict[str, Cell] = {}
-    def _iter(raw_node, raw_neighbors):
-        cell = None
-        if raw_node in converted_nodes:
-            cell = converted_nodes[raw_node]
-        else:
-            cell = converted_nodes[raw_node] = Cell.from_str(raw_node)
+    converted_nodes:dict[str, Cell] = {raw_node:Cell.from_str(raw_node) for raw_node in maze.keys()}
+    for raw_node, raw_neighbors in maze.items():
+        cell = converted_nodes[raw_node]
+        adj_list[cell] = [converted_nodes[raw_neighbor] for raw_neighbor in raw_neighbors]
 
-    for raw_node in raw.keys():
-        cell = None
-        if raw_node in converted_nodes:
-            cell = converted_nodes[raw_node]
-        else:
-            cell = converted_nodes[raw_node] = Cell.from_str(raw_node)
+    return {
+        "graph": adj_list,
+        "start": converted_nodes[start],
+        "end": converted_nodes[end],
+        # TODO: Convert the solution to a list of Cells and directions
+        # TODO: Apparently, this is the actual traversal not only the solution
+        "solution": solution,
+    }
         
-def main():
+def parse_cli_args() :
+    import argparse
     from sys import argv
-    # match a -l and -w flag from argv
-    length = None
-    width = None
-    match argv:
-        case [_, '-l', length, '-w', width]:
-            length = int(length)
-            width = int(width)
-        case [_, '-l', length]:
-            length = int(length)
-            width = length
-        case [_, '-w', width]:
-            width = int(width)
-            length = width
-        # case [_, '-f', path]:
-        #     maze = import_file(path)
-        #     length = len(maze)
-        #     width = len(maze[0])
-        case _:
-            print("Usage: python random-dfs.py [-l length] [-w width]")
-            return
+    parser = argparse.ArgumentParser(description='Generate a maze')
+    parser.add_argument('-l', '--length', type=int, help='The length of the maze')
+    parser.add_argument('-w', '--width', type=int, help='The width of the maze')
+    parser.add_argument('-f', '--file', type=str, help='reads a json file containing a maze')
+    parser.add_argument('-show', '--show', action='store_true', help='Show the maze')
+    parser.add_argument('-export', '--export', type=str, help='Export the maze to a file')
+    if len(argv) == 1:
+        parser.print_help()
+        exit(0)
+    return parser.parse_args(argv[1:])
 
-    STARTING_CELL,ENDING_CELL, maze_generator = random_dfs(length=length,width=width)
-    print(f"Starting at {STARTING_CELL}")
-    print(f"Ending cell {ENDING_CELL}")
-    final_maze = []
-    final_path = []
-    for maze, path in maze_generator:
-        final_maze = maze
-        final_path = path
-        show_maze(final_maze, STARTING_CELL, ENDING_CELL)
+def main():
+    args = parse_cli_args()
+    if args.length and args.width:
+        STARTING_CELL,ENDING_CELL, maze_generator = random_dfs(length=args.length,width=args.width)
+        final_maze = []
+        final_path = []
+        for maze, path in maze_generator:
+            final_maze = maze
+            final_path = path
+        if args.show:
+            show_maze(final_maze, STARTING_CELL, ENDING_CELL)
+            print(" -> ".join([str(p) for p in final_path]))
+        if args.export:
+            maze_details = adjacency_list(final_maze)
+            export_file(maze_details, final_path, (STARTING_CELL, ENDING_CELL), args.export)
 
-    print(" -> ".join([str(p) for p in final_path]))
-    l = adjacency_list(final_maze)
-    # print(l)
-    export_file(l, 'maze.json')
+    if args.file:
+        maze_details = import_maze_details(args.file)
+        maze = as_matrix(maze_details['graph'])
+        if args.show:
+            show_maze(maze, maze_details['start'], maze_details['end'])
+            # print(" -> ".join([str(p) for p in maze_details['solution']]))
 
 if __name__ == '__main__':
     main()
