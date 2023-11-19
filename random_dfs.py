@@ -61,7 +61,7 @@ def parse_cli_args() :
 def main():
     args = parse_cli_args()
     if args.length and args.width:
-        STARTING_CELL,ENDING_CELL, maze_generator = random_dfs(length=args.length,width=args.width)
+        (STARTING_CELL, ENDING_CELL, maze_generator) = random_dfs(length=args.length,width=args.width)
         final_maze = []
         final_path = []
         for maze, path in maze_generator:

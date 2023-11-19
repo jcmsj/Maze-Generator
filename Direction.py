@@ -6,9 +6,6 @@ class Direction(Enum):
     EAST = (1,0)
     SOUTH = (0,1)
 
-    def __add__(self, other):
-        return Direction((self.value + other) % 4)
-
     def inverse(self):
         match self:
             case Direction.WEST:
