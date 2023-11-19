@@ -28,7 +28,14 @@ class Cell:
 
     def __str__(self) -> str:
         return self.__repr__()
-
+    
+    def __lt__(self, other):
+        """ To support using < operator """
+        return self.X < other.X and self.Y < other.Y
+    def __le__(self, other):
+        """ To support using <= operator """
+        return self.X <= other.X and self.Y <= other.Y
+    
     def __doc__(self):
         """Represents a cell in a grid.
 

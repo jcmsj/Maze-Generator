@@ -1,8 +1,8 @@
+from queue import PriorityQueue
 from Cell import Cell
 from maze import import_maze_details
-from queue import PriorityQueue
 
-def heuristic(a, b):
+def heuristic(a:Cell, b:Cell):
     '''Calculate the Manhattan distance between two cells'''
     return abs(a.X - b.X) + abs(a.Y - b.Y)
 
@@ -10,7 +10,7 @@ def a_star_search(maze_info):
     '''Run A* search on the maze'''
     starting_cell:Cell = maze_info['start']
     ending_cell:Cell = maze_info['end']
-    maze = maze_info['graph']
+    maze:dict[Cell,list[Cell]] = maze_info['graph']
 
     # Initialize priority queue with starting cell
     queue = PriorityQueue()
@@ -47,17 +47,15 @@ def a_star_search(maze_info):
 
     # If ending cell was not found, return None
     return None
-
 def parse_cli_args() :
-    import argparse
+    from argparse import ArgumentParser
     from sys import argv
-    parser = argparse.ArgumentParser(description='Solves  a maze using A* search')
+    parser = ArgumentParser(description='Solves  a maze using A* search')
     parser.add_argument('-f', '--file', type=str, help='reads a json file containing a maze')
     if len(argv) == 1:
         parser.print_help()
         exit(0)
     return parser.parse_args(argv[1:])
-
 def main():
     '''Run if main module'''
     args = parse_cli_args()
