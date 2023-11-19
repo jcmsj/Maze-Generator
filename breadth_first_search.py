@@ -1,5 +1,6 @@
 
-from random_dfs import Cell, import_maze_details, parse_cli_args
+from Cell import Cell
+from maze import import_maze_details
 
 def breadth_first_search(maze_info):
     '''Run breath first search on the maze'''
@@ -38,7 +39,15 @@ def breadth_first_search(maze_info):
 
     # If ending cell was not found, return None
     return None
-
+def parse_cli_args() :
+    import argparse
+    from sys import argv
+    parser = argparse.ArgumentParser(description='Solves a maze using Breadth First Search')
+    parser.add_argument('-f', '--file', type=str, required=True, help='reads a json file containing a maze')
+    if len(argv) == 1:
+        parser.print_help()
+        exit(0)
+    return parser.parse_args(argv[1:])
 def main():
     '''Run if main module'''
     args = parse_cli_args()

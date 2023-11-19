@@ -1,4 +1,6 @@
-from random_dfs import Cell, State, as_matrix, import_maze_details, parse_cli_args
+from Cell import Cell
+from State import State
+from maze import as_matrix, import_maze_details
 
 def depth_first_search(maze: list[list[Cell]], start:Cell, end:Cell):
     """Run depth first search on a matrix representation of the maze. Returns a tuple containing the path and the entire traversal order"""
@@ -27,11 +29,20 @@ def depth_first_search(maze: list[list[Cell]], start:Cell, end:Cell):
 
 def print_path(path):
     if path:
-            print("Solution:", " -> ".join(map(str, path)))
+        print("Solution:", " -> ".join(map(str, path)))
     else:
-            print("No solution found.")
+        print("No solution found.")
+def parse_cli_args() :
+    import argparse
+    from sys import argv
+    parser = argparse.ArgumentParser(description='Solves  a maze using Depth First Search')
+    parser.add_argument('-f', '--file', type=str, required=True, help='reads a json file containing a maze')
+    if len(argv) == 1:
+        parser.print_help()
+        exit(0)
+    return parser.parse_args(argv[1:])
 
-def dfs_main():
+def main():
     args = parse_cli_args()
     if args.file:
         maze_info = import_maze_details(args.file)
@@ -40,6 +51,5 @@ def dfs_main():
         print_path(path)
         print_path(traversal)
 
-
 if __name__ == '__main__':
-    dfs_main()
+    main()
