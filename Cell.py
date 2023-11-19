@@ -6,6 +6,7 @@ class Cell:
     def __init__(self, x:int, y:int ) -> None:
         self.X = x
         self.Y = y
+        # For every direction, set the wall in that direction as unvisited
         self.walls = {d:State.UNVISITED for d in DIRECTIONS}
 
     def unvisited_walls(self):
