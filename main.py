@@ -5,14 +5,14 @@ from random_dfs import random_dfs
 
 def load_image(path:str, size:int):
     """
-    Load an image tile from the given path and resize it to the specified size.
+    Load an image from the given path and resize it to the specified size.
 
     Args:
         path (str): The path to the image file.
-        size (int): The desired size of the image tile.
+        size (int): The desired size of the image.
 
     Returns:
-        pygame.Surface: The resized image tile.
+        pygame.Surface: The scaled image.
     """
     return pygame.transform.scale(pygame.image.load(path), (size, size))
 
