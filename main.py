@@ -118,6 +118,7 @@ def _main():
     start_cell = None
     ending_cell = None
     maze = []
+    
     def start():
         nonlocal start_cell, ending_cell, maze, gen
         start_cell, ending_cell, gen = random_dfs(length=length,width=width)
@@ -133,6 +134,7 @@ def _main():
                 gen = None
 
     player = animator("assets/player/playeridle", "gif", 6, SIZE)
+    goal = animator("assets/goal/goal", "gif", 4, SIZE)
     start()
     _step()
     # Start the game loop 
@@ -208,6 +210,7 @@ def _main():
         screen.blit(FPS_LABEL, FPS_LABEL_RECT)
         # Draw the player at the starting cell
         screen.blit(next(player), reposition_img(start_cell.X, start_cell.Y))
+        screen.blit(next(goal), reposition_img(ending_cell.X, ending_cell.Y))
         FPS_FIELD.draw()
         # Update the display
         pygame.display.flip()
