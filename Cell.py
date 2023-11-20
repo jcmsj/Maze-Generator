@@ -13,6 +13,9 @@ class Cell:
         """Returns a list of directions that are unvisited"""
         return [dir for dir, state in self.walls.items() if state == State.UNVISITED]
 
+    def visited_walls(self):
+        """Returns a list of directions that are visited"""
+        return [dir for dir, state in self.walls.items() if state == State.VISITED]
     def __repr__(self) -> str:
         return f'({self.X},{self.Y})'
 

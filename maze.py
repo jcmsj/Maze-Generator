@@ -110,12 +110,13 @@ def adjacency_list(maze: list[list[Cell]]) -> dict[str, list[str]]:
     for y in range(length):
         for x in range(width):
             cell = maze[y][x]
-            s = str(cell)
-            adj_list[s] = []
+            cell_str_representation:str = str(cell)
+            adj_list[cell_str_representation] = [] # will contain the string representations of the adjacent cells
 
             for direction, state in cell.walls.items():
                 if state == State.VISITED:
-                    adj_list[s].append(str(maze[y + direction.value[1]][x + direction.value[0]]))
+                    cell_at_direction = maze[y+direction.value[1]][x+direction.value[0]]
+                    adj_list[cell_str_representation].append(str(cell_at_direction))
     return adj_list
 
 def show_maze(maze:list[list[Cell]], start_cell:Cell, ending_cell: Cell):
