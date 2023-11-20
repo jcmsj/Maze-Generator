@@ -27,7 +27,6 @@ def random_dfs(length:int, width:int):
                 continue
             # (2.2) Choose one of the unvisited neighbours
             direction: Direction = random.choice(open_list)
-            last_direction = direction
             # Get the cell at the given direction
             chosen: Cell = maze[current.Y+direction.value[1]][current.X+direction.value[0]]
             if chosen.visited:
