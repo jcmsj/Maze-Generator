@@ -1,9 +1,9 @@
 import pygame
-from TextField import TextField
+from widgets import BoolVal, Button, Button, Text, TextField
 from maze import show_maze
 from random_dfs import random_dfs
 
-def load_image(path:str, size:int):
+def load_image(path:str, width:int, length:int, ):
     """
     Load an image from the given path and resize it to the specified size.
 
@@ -14,8 +14,7 @@ def load_image(path:str, size:int):
     Returns:
         pygame.Surface: The scaled image.
     """
-    return pygame.transform.scale(pygame.image.load(path), (size, size))
-
+    return pygame.transform.scale(pygame.image.load(path), (width, length))
 def animator(basename: str, file_extension: str, frame_count: int, size, loop=True):
     """
     Generates frames for animation based on the given parameters.
@@ -31,9 +30,9 @@ def animator(basename: str, file_extension: str, frame_count: int, size, loop=Tr
         frame: The next frame in the animation.
 
     """
-    frames = [
-        load_image(f"{basename}_{i}.{file_extension}", size) for i in range(frame_count)
-    ]
+    frames = tuple([
+        load_image(f"{basename}_{i}.{file_extension}", size,size) for i in range(frame_count)
+    ])
     index = 0
     if loop:
         while True:
@@ -54,30 +53,65 @@ def _main():
     textFont = pygame.font.Font("assets/pixel.ttf", 24)
     BLACK = (0, 0, 0)
     WHITE = (255, 255, 255)
-    PLAY_BUTTON_LABEL = materialIcons.render('play_arrow', True, WHITE, BLACK)
-    PLAY_BUTTON = PLAY_BUTTON_LABEL.get_rect()
-    PLAY_BUTTON.center = (1232, 50)
-
-    # Create a Pause button
-    PAUSE_BUTTON_LABEL = materialIcons.render('pause', True, WHITE, BLACK)
-    PAUSE_BUTTON = PAUSE_BUTTON_LABEL.get_rect()
-    PAUSE_BUTTON.center = (1232, 50)
-
-    # Restart button
-    RESTART_BUTTON_LABEL = materialIcons.render('replay', True, WHITE, BLACK)
-    RESTART_BUTTON = RESTART_BUTTON_LABEL.get_rect()
-    RESTART_BUTTON.center = (1232, 150)
-    length =8 #len(maze)
-    width = 16 #len(maze[0])
-
-    # Add a button to go to next step
-    NEXT_STEP_LABEL = materialIcons.render('fast_forward', True, WHITE, BLACK)
-    NEXT_STEP_BUTTON = NEXT_STEP_LABEL.get_rect()
-    NEXT_STEP_BUTTON.center = (1232, 250)
-
     CONFIG = {
         "FPS_CAP": 10,
     }
+    PLAYING = BoolVal(False)
+    PLAY_BUTTON = Button(
+        onclick= PLAYING.to_true,
+        text=Text(
+            'play_arrow', 
+            screen, 
+            materialIcons, 
+            (1232, 50),
+            WHITE,
+            BLACK,
+        ),
+    )
+    PAUSE_BUTTON = Button(
+        onclick= PLAYING.to_false,
+        text=Text(
+            'pause',
+            screen,
+            materialIcons,
+            (1232, 50),
+            WHITE,
+            BLACK,
+        ),
+    )
+
+    length =8 #len(maze)
+    width = 16 #len(maze[0])
+    gen = None
+    start_cell = None
+    ending_cell = None
+    maze = []
+    
+    def start():
+        nonlocal start_cell, ending_cell, maze, gen
+        start_cell, ending_cell, gen = random_dfs(length=length,width=width)
+
+    def _step():
+        nonlocal maze, gen
+        if gen != None:
+            try:
+                maze,_ = next(gen)
+            except:
+                PLAYING.to_false()
+                gen = None
+
+    NEXT_STEP = Button(
+        onclick= _step,
+        text=Text(
+            'fast_forward',
+            screen,
+            materialIcons,
+            (1232, 300),
+            WHITE,
+            BLACK,
+        ),
+    )
+
     def onFPSChange(val:str):
         if val.isdigit():
             CONFIG["FPS_CAP"] = int(val)
@@ -88,50 +122,58 @@ def _main():
     FPS_LABEL = textFont.render('FPS:', True, WHITE, BLACK)
     FPS_LABEL_RECT = FPS_LABEL.get_rect()
     FPS_LABEL_RECT.center = (1232, 350)
-    FPS_FIELD = TextField(screen, str(CONFIG['FPS_CAP']), 1232, 400, textFont, WHITE, BLACK, onSubmit=onFPSChange)
+    FPS_FIELD = TextField(
+        screen, 
+        str(CONFIG['FPS_CAP']), 
+        1232, 
+        400, 
+        textFont, 
+        WHITE, 
+        BLACK, 
+        onSubmit=onFPSChange
+    )
     SIDE = 50
-    SIZE = SIDE+25
+    SIZE = SIDE + 25
     paths = {
-        'northOOB': load_image("assets/paths/northOOB.png", SIZE), #0
-        'southOOB': load_image("assets/paths/southOOB.png", SIZE), #1
-        'eastOOB': load_image("assets/paths/eastOOB.png", SIZE), #2
-        'westOOB': load_image("assets/paths/westOOB.png", SIZE), #3
-        'NORTHEAST': load_image("assets/paths/NORTHEAST.png", SIZE), #4
-        'NORTHWEST': load_image("assets/paths/NORTHWEST.png", SIZE), #5
-        'SOUTHEAST': load_image("assets/paths/SOUTHEAST.png", SIZE), #6
-        'SOUTHWEST': load_image("assets/paths/SOUTHWEST.png", SIZE), #7
-        'H_north': load_image("assets/paths/H_north.png", SIZE), #8
-        'H_south': load_image("assets/paths/H_south.png", (SIZE)), #9
-        'V_east': load_image("assets/paths/V_east.png", SIZE), #10
-        'V_west': load_image("assets/paths/V_west.png", SIZE), #11
-        'HORIZONTAL': load_image("assets/paths/HORIZONTAL.png", SIZE), #12
-        'VERTICAL': load_image("assets/paths/VERTICAL.png", SIZE), #13
-        'INTERSECTION': load_image("assets/paths/INTERSECTION.png", SIZE), #14
-        'unsectioned': load_image("assets/paths/unsectioned.png", SIZE) #15   
+        'northOOB': load_image("assets/paths/northOOB.png", SIZE,SIZE), #0
+        'southOOB': load_image("assets/paths/southOOB.png", SIZE,SIZE), #1
+        'eastOOB': load_image("assets/paths/eastOOB.png", SIZE,SIZE), #2
+        'westOOB': load_image("assets/paths/westOOB.png", SIZE,SIZE), #3
+        'NORTHEAST': load_image("assets/paths/NORTHEAST.png", SIZE,SIZE), #4
+        'NORTHWEST': load_image("assets/paths/NORTHWEST.png", SIZE,SIZE), #5
+        'SOUTHEAST': load_image("assets/paths/SOUTHEAST.png", SIZE,SIZE), #6
+        'SOUTHWEST': load_image("assets/paths/SOUTHWEST.png", SIZE,SIZE), #7
+        'H_north': load_image("assets/paths/H_north.png", SIZE,SIZE), #8
+        'H_south': load_image("assets/paths/H_south.png", SIZE, SIZE), #9
+        'V_east': load_image("assets/paths/V_east.png", SIZE,SIZE), #10
+        'V_west': load_image("assets/paths/V_west.png", SIZE,SIZE), #11
+        'HORIZONTAL': load_image("assets/paths/HORIZONTAL.png", SIZE,SIZE), #12
+        'VERTICAL': load_image("assets/paths/VERTICAL.png", SIZE,SIZE), #13
+        'INTERSECTION': load_image("assets/paths/INTERSECTION.png", SIZE,SIZE), #14
+        'unsectioned': load_image("assets/paths/unsectioned.png", SIZE,SIZE) #15   
     }
+    # Restart button
+    def restart():
+        start()
+        PLAYING.to_false()
+        _step()
+
+    RESTART_BUTTON = Button(
+        onclick= restart,
+        text=Text(
+            'replay',
+            screen,
+            materialIcons,
+            (1232, 150),
+            WHITE, 
+            BLACK,
+        ),
+    )
 
     def reposition_img(x,y):
         X_START = x*SIZE
         Y_START = y*SIZE
         return (X_START, Y_START)
-    gen = None
-    start_cell = None
-    ending_cell = None
-    maze = []
-    
-    def start():
-        nonlocal start_cell, ending_cell, maze, gen
-        start_cell, ending_cell, gen = random_dfs(length=length,width=width)
-
-    pause_iteration = True
-    def _step():
-        nonlocal maze, gen, pause_iteration
-        if gen != None:
-            try:
-                maze,_ = next(gen)
-            except:
-                pause_iteration = True
-                gen = None
 
     player = animator("assets/player/playeridle", "gif", 6, SIZE)
     goal = animator("assets/goal/goal", "gif", 4, SIZE)
@@ -143,18 +185,12 @@ def _main():
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit()
-            if event.type == pygame.MOUSEBUTTONUP:
-                if pause_iteration and PLAY_BUTTON.collidepoint(event.pos):
-                        pause_iteration = False
-                elif not pause_iteration and PAUSE_BUTTON.collidepoint(event.pos):
-                        pause_iteration = True
-                if RESTART_BUTTON.collidepoint(event.pos):
-                    start()
-                    pause_iteration = True
-                    _step()
-
-                if NEXT_STEP_BUTTON.collidepoint(event.pos):
-                    _step()
+            if PLAYING:
+                PAUSE_BUTTON.listen(event)
+            else: 
+                PLAY_BUTTON.listen(event)
+            RESTART_BUTTON.listen(event)
+            NEXT_STEP.listen(event)
             FPS_FIELD.listen(event)
         # Draw the game screen
         screen.fill((0, 0, 0))
@@ -200,13 +236,12 @@ def _main():
                     pass
         
         # Draw the play button
-        if pause_iteration:
-            screen.blit(PLAY_BUTTON_LABEL, PLAY_BUTTON)
+        if PLAYING:
+            PAUSE_BUTTON.draw()
         else:
-            screen.blit(PAUSE_BUTTON_LABEL, PLAY_BUTTON)
-        
-        screen.blit(RESTART_BUTTON_LABEL, RESTART_BUTTON)
-        screen.blit(NEXT_STEP_LABEL, NEXT_STEP_BUTTON)
+            PLAY_BUTTON.draw()
+        RESTART_BUTTON.draw()
+        NEXT_STEP.draw()
         screen.blit(FPS_LABEL, FPS_LABEL_RECT)
         # Draw the player at the starting cell
         screen.blit(next(player), reposition_img(start_cell.X, start_cell.Y))
@@ -217,7 +252,7 @@ def _main():
         # limit FPS
         pygame.time.Clock().tick(CONFIG['FPS_CAP'])
 
-        if not pause_iteration:
+        if PLAYING:
             _step()
 
 def main():
