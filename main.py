@@ -106,7 +106,7 @@ def _main():
             'fast_forward',
             screen,
             materialIcons,
-            (1232, 300),
+            (1232, 250),
             WHITE,
             BLACK,
         ),
