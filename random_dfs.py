@@ -1,7 +1,5 @@
 import random
 from Cell import Cell
-from Direction import Direction
-from State import State
 from maze import adjacency_list, export_file, make_initial_maze, random_cell
 
 def random_dfs(length:int, width:int):
@@ -9,41 +7,38 @@ def random_dfs(length:int, width:int):
     maze = make_initial_maze(length, width)
     # (1) Choose the initial cell, mark it as visited and push it to the stack
     STARTING_CELL = random_cell(maze)
-    # STARTING_CELL.visited = True
     ENDING_CELL = random_cell(maze)
-    stack = [STARTING_CELL]
-    # The path represents the entire graph traversal.
-    path:list[Cell|str] = [STARTING_CELL]
 
+    def get_neighbors(cell:Cell):
+        """Returns the dir and cell at unvisited walls"""
+        # Get the cell at the given direction
+        neighbors = {dir:maze[cell.Y+dir.value[1]][cell.X+dir.value[0]] for dir in cell.unvisited_walls()}
+        return [(dir,n) for dir,n in neighbors.items() if not n.visited]
     def _generator():
+        stack = [STARTING_CELL]
+        # The path represents the entire graph traversal.
+        path:list[Cell|str] = []
+
         # Yield the initial maze
         yield maze, path
+
         while len(stack) > 0:
             current: Cell = stack.pop()
-            # Identify unvisited neighbors
-            open_list: list[Direction] = current.unvisited_walls()
             # (2) If the chosen cell has any unvisited neighbours
-            if len(open_list) == 0:
+            neighbors = get_neighbors(current)
+            path.append(current)
+            if len(neighbors) == 0:
                 continue
-            # (2.2) Choose one of the unvisited neighbours
-            direction: Direction = random.choice(open_list)
-            # Get the cell at the given direction
-            chosen: Cell = maze[current.Y+direction.value[1]][current.X+direction.value[0]]
-            if chosen.visited:
-                continue
-            # (2.2) Push the current cell to the stack
+            # (2.1) Choose one of the unvisited neighbours
+            direction, chosen = random.choice(neighbors)
+            # (2.2) Mark the chosen cell as visited
+            current.visit(chosen, direction)
+            # (2.3) Put back current
             stack.append(current)
-            # (2.3) Remove the wall between the current cell... 
-            current.walls[direction] = State.VISITED
-            # and the chosen cell
-            chosen.walls[direction.inverse()] = State.VISITED
-            # (2.4) Mark the chosen cell as visited and push it to the stack
-            # Modifying the walls of the chosen cell is enough to mark it as visited
+            # (2.4) push chosen to the stack, 
+            # since we want to visit it next, since dfs
             stack.append(chosen)
           
-            # Note the path
-            path.append(direction.show())
-            path.append(chosen)
             yield maze, path
 
     return STARTING_CELL, ENDING_CELL, _generator()

@@ -1,4 +1,4 @@
-from Direction import DIRECTIONS
+from Direction import DIRECTIONS, Direction
 from State import State
 import re
 
@@ -22,6 +22,12 @@ class Cell:
     @property
     def visited(self) -> bool:
         return State.VISITED in self.walls.values()
+
+    def visit(self, other: "Cell", d:Direction):
+        # Remove the wall between the current cell and chosen cell... 
+        self.walls[d] = State.VISITED
+        # and the chosen cell
+        other.walls[d.inverse()] = State.VISITED
 
     @classmethod
     def from_str(cls, s:str):

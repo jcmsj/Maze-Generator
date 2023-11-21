@@ -49,7 +49,7 @@ def main():
         maze_matrix = as_matrix(maze_info['graph'])
         path, traversal = depth_first_search(maze_matrix, maze_info['start'], maze_info['end'])
         print_path(path)
-        print_path(traversal)
+        # print_path(traversal)
 
 if __name__ == '__main__':
     main()
