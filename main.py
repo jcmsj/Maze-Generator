@@ -45,7 +45,10 @@ def animator(basename: str, file_extension: str, frame_count: int, size, loop=Tr
 
 def _main():
     # maze:list[list[Cell]], start_cell:Cell, ending_cell: Cell, 
-    screen = pygame.display.set_mode((1280, 720))
+    SIZE = 75
+    length =8 #len(maze)
+    width = 16 #len(maze[0])
+    screen = pygame.display.set_mode(((width+1)*SIZE, length*SIZE))
     pygame.display.set_caption("Yet Another Maze Generator")
     # load the material icons font
     pygame.font.init()
@@ -54,7 +57,7 @@ def _main():
     BLACK = (0, 0, 0)
     WHITE = (255, 255, 255)
     CONFIG = {
-        "FPS_CAP": 10,
+        "FPS_CAP": 30,
     }
     PLAYING = BoolVal(False)
     PLAY_BUTTON = Button(
@@ -80,8 +83,7 @@ def _main():
         ),
     )
 
-    length =8 #len(maze)
-    width = 16 #len(maze[0])
+
     gen = None
     start_cell = None
     ending_cell = None
@@ -100,8 +102,16 @@ def _main():
                 PLAYING.to_false()
                 gen = None
 
+    def _skip():
+        nonlocal maze, gen
+        while gen != None:
+            try:
+                maze,_ = next(gen)
+            except:
+                PLAYING.to_false()
+                gen = None
     NEXT_STEP = Button(
-        onclick= _step,
+        onclick= _skip,
         text=Text(
             'fast_forward',
             screen,
@@ -132,8 +142,7 @@ def _main():
         BLACK, 
         onSubmit=onFPSChange
     )
-    SIDE = 50
-    SIZE = SIDE + 25
+
     paths = {
         'northOOB': load_image("assets/paths/northOOB.png", SIZE,SIZE), #0
         'southOOB': load_image("assets/paths/southOOB.png", SIZE,SIZE), #1
@@ -152,9 +161,19 @@ def _main():
         'INTERSECTION': load_image("assets/paths/INTERSECTION.png", SIZE,SIZE), #14
         'unsectioned': load_image("assets/paths/unsectioned.png", SIZE,SIZE) #15   
     }
+
+    start()
+    _step()
+    player_x = start_cell.X
+    
+    player_y = start_cell.Y
+    
     # Restart button
     def restart():
+        nonlocal player_x, player_y
         start()
+        player_x = start_cell.X
+        player_y = start_cell.Y
         PLAYING.to_false()
         _step()
 
@@ -170,15 +189,23 @@ def _main():
         ),
     )
 
-    def reposition_img(x,y):
-        X_START = x*SIZE
-        Y_START = y*SIZE
+    def reposition_img(x,y,x_pad=0,y_pad=0):
+        X_START = (x*SIZE) + x_pad
+        Y_START = (y*SIZE) + y_pad
+
+        # original_scale x new_scale + diff
+        # upscaling_factor = 4
+        # downscaling_factor = 3
+        # (1,1) * 4 = (4,4) 
+        # scaled = (4,4) * 3/4 = (3,3)
+        # diff = (4,4)- (3,3) = (1,1)
+        # = (3.5, 3.5) add the half??
         return (X_START, Y_START)
 
-    player = animator("assets/player/playeridle", "gif", 6, SIZE)
-    goal = animator("assets/goal/goal", "gif", 4, SIZE)
-    start()
-    _step()
+    player = animator("assets/player/playeridle", "gif", 6, (SIZE-30))
+    goal = animator("assets/goal/goal", "gif", 4, (SIZE-45))
+    playerwalk = animator("assets/player/playerwalk", "gif", 4, (SIZE-30))
+
     # Start the game loop 
     while True:
         # Check for events
@@ -192,8 +219,21 @@ def _main():
             RESTART_BUTTON.listen(event)
             NEXT_STEP.listen(event)
             FPS_FIELD.listen(event)
+            
+            if event.type == pygame.KEYDOWN:
+                player_x += int(event.key == pygame.K_d) - int(event.key == pygame.K_a)
+                player_y += int(event.key == pygame.K_s) - int(event.key == pygame.K_w)
+                
+            # event.unicode
+            # check what letter
+            
         # Draw the game screen
         screen.fill((0, 0, 0))
+        
+        player_x_pad = 14
+        player_y_pad = 3
+        goal_x_pad = 23
+        goal_y_pad = 8
 
         for y in range(length):
             for x in range(width):
@@ -244,8 +284,8 @@ def _main():
         NEXT_STEP.draw()
         screen.blit(FPS_LABEL, FPS_LABEL_RECT)
         # Draw the player at the starting cell
-        screen.blit(next(player), reposition_img(start_cell.X, start_cell.Y))
-        screen.blit(next(goal), reposition_img(ending_cell.X, ending_cell.Y))
+        screen.blit(next(player), reposition_img(player_x, player_y, player_x_pad, player_y_pad))
+        screen.blit(next(goal), reposition_img(ending_cell.X, ending_cell.Y, goal_x_pad, goal_y_pad))
         FPS_FIELD.draw()
         # Update the display
         pygame.display.flip()
