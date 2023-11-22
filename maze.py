@@ -153,7 +153,7 @@ def show_maze(maze:list[list[Cell]], start_cell:Cell, ending_cell: Cell):
     print("+---"*width, end="")
     print('+')
 
-def export_file(maze: dict[str,list[str]], traversal:list[Cell|str], startEnd:tuple[Cell,Cell], filepath:str):
+def export_file(maze: dict[str,list[str]], traversal:list[Cell], startEnd:tuple[Cell,Cell], filepath:str):
     import json
     with open(filepath, 'w') as f:
         json.dump({

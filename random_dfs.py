@@ -14,20 +14,20 @@ def random_dfs(length:int, width:int):
         # Get the cell at the given direction
         neighbors = {dir:maze[cell.Y+dir.value[1]][cell.X+dir.value[0]] for dir in cell.unvisited_walls()}
         return [(dir,n) for dir,n in neighbors.items() if not n.visited]
-    path:list[Cell|str] = []
+    path:list[Cell|str] = [STARTING_CELL]
     def _generator():
         stack = [STARTING_CELL]
         # The path represents the entire graph traversal.
 
         # Yield the initial maze
-        yield maze
-
+        yield maze,path
         while len(stack) > 0:
             current: Cell = stack.pop()
             # (2) If the chosen cell has any unvisited neighbours
             neighbors = get_neighbors(current)
-            path.append(current)
             if len(neighbors) == 0:
+                path.append(current)
+                yield maze, path
                 continue
             # (2.1) Choose one of the unvisited neighbours
             direction, chosen = random.choice(neighbors)
@@ -38,7 +38,7 @@ def random_dfs(length:int, width:int):
             # (2.4) push chosen to the stack, 
             # since we want to visit it next, since dfs
             stack.append(chosen)
-          
+            path.append(chosen)
             yield maze, path
 
     return STARTING_CELL, ENDING_CELL, _generator(), maze, path

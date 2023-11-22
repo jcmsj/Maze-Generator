@@ -1,6 +1,8 @@
 import pygame
+from Cell import Cell
+from prim import prim
 from widgets import BoolVal, Button, Button, Text, TextField
-from maze import show_maze
+from maze import make_initial_maze, show_maze
 from random_dfs import random_dfs
 
 def load_image(path:str, width:int, length:int, ):
@@ -46,8 +48,8 @@ def animator(basename: str, file_extension: str, frame_count: int, size, loop=Tr
 def _main():
     # maze:list[list[Cell]], start_cell:Cell, ending_cell: Cell, 
     SIZE = 75
-    length =8 #len(maze)
     width = 16 #len(maze[0])
+    length = 8 #len(maze)
     screen = pygame.display.set_mode(((width+1)*SIZE, length*SIZE))
     pygame.display.set_caption("Yet Another Maze Generator")
     # load the material icons font
@@ -58,6 +60,8 @@ def _main():
     WHITE = (255, 255, 255)
     CONFIG = {
         "FPS_CAP": 30,
+        "GENERATOR": "random_dfs",
+        "ALGOS": ["random_dfs", "prim"],
     }
     PLAYING = BoolVal(False)
     PLAY_BUTTON = Button(
@@ -87,28 +91,36 @@ def _main():
     gen = None
     start_cell = None
     ending_cell = None
-    maze = []
-    
+    maze:list[list[Cell]] = []
+    traversal = []
     def start():
-        nonlocal start_cell, ending_cell, maze, gen
-        start_cell, ending_cell, gen, maze,_ = random_dfs(length=length,width=width)
+        nonlocal start_cell, ending_cell, maze, gen, traversal
+        if CONFIG["GENERATOR"] == "random_dfs":
+            start_cell, ending_cell, gen, maze,traversal = random_dfs(length=length,width=width)
+        elif CONFIG["GENERATOR"] == "prim":
+            maze = make_initial_maze(length=length,width=width)
+            start_cell, ending_cell, gen, maze,traversal = prim(maze)
+        else:
+            raise ValueError(f"Unknown algorithm: {CONFIG['ALGO']}")
 
     def _step():
-        nonlocal gen
+        nonlocal gen, traversal
         if gen != None:
             try:
                 next(gen)
             except:
                 PLAYING.to_false()
+                traversal = None
                 gen = None
 
     def _skip():
-        nonlocal gen
+        nonlocal gen, traversal
         while gen != None:
             try:
                 next(gen)
             except:
                 PLAYING.to_false()
+                traversal = None
                 gen = None
     NEXT_STEP = Button(
         onclick= _skip,
@@ -234,7 +246,6 @@ def _main():
         player_y_pad = 3
         goal_x_pad = 23
         goal_y_pad = 8
-
         for y in range(length):
             for x in range(width):
                 cell = maze[y][x]
@@ -274,7 +285,10 @@ def _main():
                     screen.blit(paths['southOOB'], position)
                 else: 
                     pass
-        
+                if PLAYING and traversal and cell == traversal[-1]:
+                    # draw a red tile
+                    xx,yy = position
+                    pygame.draw.rect(screen, (255,0,0),(xx,yy,SIZE,SIZE ), 6)
         # Draw the play button
         if PLAYING:
             PAUSE_BUTTON.draw()
