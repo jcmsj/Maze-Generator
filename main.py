@@ -91,22 +91,22 @@ def _main():
     
     def start():
         nonlocal start_cell, ending_cell, maze, gen
-        start_cell, ending_cell, gen = random_dfs(length=length,width=width)
+        start_cell, ending_cell, gen, maze,_ = random_dfs(length=length,width=width)
 
     def _step():
-        nonlocal maze, gen
+        nonlocal gen
         if gen != None:
             try:
-                maze,_ = next(gen)
+                next(gen)
             except:
                 PLAYING.to_false()
                 gen = None
 
     def _skip():
-        nonlocal maze, gen
+        nonlocal gen
         while gen != None:
             try:
-                maze,_ = next(gen)
+                next(gen)
             except:
                 PLAYING.to_false()
                 gen = None
@@ -298,13 +298,10 @@ def _main():
 def main():
     length = 8
     width = 16
-    STARTING_CELL,ENDING_CELL, maze_generator = random_dfs(length=length,width=width)
-    final_maze = []
-    final_path = []
-    for maze, path in maze_generator:
-        final_maze = maze
-        final_path = path
-    show_maze(final_maze, STARTING_CELL, ENDING_CELL)
+    STARTING_CELL,ENDING_CELL, maze_generator,maze,path = random_dfs(length=length,width=width)
+    for _ in maze_generator:
+        pass
+    show_maze(maze, STARTING_CELL, ENDING_CELL)
     _main()
 
 

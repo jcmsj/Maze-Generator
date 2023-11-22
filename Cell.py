@@ -18,7 +18,8 @@ class Cell:
         return [dir for dir, state in self.walls.items() if state == State.VISITED]
     def __repr__(self) -> str:
         return f'({self.X},{self.Y})'
-
+    def non_blocked_walls(self):
+        return [d for d in self.walls if self.walls[d] != State.BLOCKED]
     @property
     def visited(self) -> bool:
         return State.VISITED in self.walls.values()
