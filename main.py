@@ -1,11 +1,24 @@
 import pygame
-from Animator import load_image
+from State import MazeState
 from Cell import Cell
 from prim import prim
 from widgets import BoolVal, Button, Button, Text, TextField
-from maze import make_initial_maze, show_maze, adjacency_list
+from maze import make_initial_maze, matrix_to_adjency_list, show_maze, adjacency_list
 from random_dfs import random_dfs
 from depth_first_search import depth_first_search
+from a_star import a_star_search
+def load_image(path:str, width:int, length:int, ):
+    """
+    Load an image from the given path and resize it to the specified size.
+
+    Args:
+        path (str): The path to the image file.
+        size (int): The desired size of the image.
+
+    Returns:
+        pygame.Surface: The scaled image.
+    """
+    return pygame.transform.scale(pygame.image.load(path), (width, length))
 def animator(basename: str, file_extension: str, frame_count: int, size, loop=True):
     """
     Generates frames for animation based on the given parameters.
@@ -38,7 +51,9 @@ def _main():
     SIZE = 75
     width = 16 #len(maze[0])
     length = 8 #len(maze)
-    screen = pygame.display.set_mode(((width+1)*SIZE, length*SIZE))
+    window_tile_width = width + 1
+    window_tile_height = length + 1
+    screen = pygame.display.set_mode((window_tile_width*SIZE, window_tile_height*SIZE))
     pygame.display.set_caption("Yet Another Maze Generator")
     # load the material icons font
     pygame.font.init()
@@ -50,7 +65,12 @@ def _main():
         "FPS_CAP": 30,
         "GENERATOR": "random_dfs",
         "ALGOS": ["random_dfs", "prim"],
+        "SOLVER": ["breadth_first_search", "depth_first_search", "a_star" ]
     }
+    def reposition_img(x:int|float,y:int|float,x_pad=0,y_pad=0):
+        X_START:int = (x*SIZE) + x_pad # type: ignore
+        Y_START:int = (y*SIZE) + y_pad # type: ignore
+        return (X_START, Y_START)
     PLAYING = BoolVal(False)
     PLAY_BUTTON = Button(
         onclick= PLAYING.to_true,
@@ -58,12 +78,11 @@ def _main():
             'play_arrow', 
             screen, 
             materialIcons, 
-            (1232, 50),
+            reposition_img(16.5, 0.5),
             WHITE,
             BLACK,
         ),
     )
-
 
     PAUSE_BUTTON = Button(
         onclick= PLAYING.to_false,
@@ -71,71 +90,90 @@ def _main():
             'pause',
             screen,
             materialIcons,
-            (1232, 50),
+            reposition_img(16.5, 0.5),
             WHITE,
             BLACK,
         ),
     )
-    done_solving = False
-    value = (-1,-1)
+    maze_state = MazeState.GENERATING
+    player_coord = (-1,-1)
     index = 0
     gen = None
-    start_cell:Cell|None = None
-    ending_cell:Cell|None = None
+    start_cell = None
+    ending_cell = None
     maze:list[list[Cell]] = []
     traversal = []
     traversal_order = []
     path = []
-    done_solving = False
     def start():
-        nonlocal start_cell, ending_cell, maze, gen, traversal
+        nonlocal start_cell, ending_cell, maze, gen, traversal, traversal_order, index, player_coord, path
+        traversal_order = []
+        index = 0
         if CONFIG["GENERATOR"] == "random_dfs":
             start_cell, ending_cell, gen, maze,traversal = random_dfs(length=length,width=width)
         elif CONFIG["GENERATOR"] == "prim":
             maze = make_initial_maze(length=length,width=width)
             start_cell, ending_cell, gen, maze,traversal = prim(maze)
+
+            
+        elif CONFIG["SOLVER"] == "depth_first_search":
+            path, traversal_order = depth_first_search(maze, start_cell, ending_cell)
+        elif CONFIG["SOLVER"] == "a_star": 
+            traversal_order = a_star_search({
+            "start": start_cell,
+            "end": ending_cell,
+            "graph": matrix_to_adjency_list(maze),
+            }) or []
+            traversal_order = [(cell.X, cell.Y) for cell in traversal_order]
+        elif CONFIG["SOLVER"] == "breadth_first_search": 
+            start_cell, ending_cell, gen, maze,traversal = random_dfs(length=length,width=width)
         else:
             raise ValueError(f"Unknown algorithm: {CONFIG['ALGO']}")
-    
-    def solve_maze():
-        nonlocal path, traversal_order, index, maze, start_cell, ending_cell, value, done_solving
+
+    def solve_dfs():
+        nonlocal path, traversal_order, index, maze, start_cell, ending_cell, player_coord, maze_state
         print("solving")
+        maze_state = MazeState.SOLVING
+        traversal_order = a_star_search({
+            "start": start_cell,
+            "end": ending_cell,
+            "graph": matrix_to_adjency_list(maze),
+        }) or []
+        traversal_order = [(cell.X, cell.Y) for cell in traversal_order]
+        player_coord = (start_cell.X, start_cell.Y)
         index = 0
-        value = (-1,-1)
-        done_solving = False
-        path, traversal_order = depth_first_search(maze,start_cell,ending_cell)
         
     def _solver():
-        nonlocal value, index, done_solving, traversal_order
+        nonlocal player_coord, index, maze_state, traversal_order
         if traversal_order and index < len(traversal_order):
-            value = traversal_order[index]
+            player_coord = traversal_order[index]
             index += 1
         else:
-            done_solving = True
+            maze_state = MazeState.SOLVED
             PLAYING.to_false()
-            value = traversal_order[-1]
+            index = 0
             traversal_order = []
+            player_coord = (ending_cell.X, ending_cell.Y)
 
     def start_or_continue():
-        nonlocal index, done_solving
+        nonlocal index, maze_state
         PLAYING.to_true()
-        if index == 0 or done_solving:
-            solve_maze()
-
+        if maze_state == MazeState.SOLVED or maze_state == MazeState.GENERATED:
+            solve_dfs()
+        
     PLAY_BUTTON_SOLVE = Button(
         onclick= start_or_continue,
         text=Text(
             'circle', 
             screen, 
             materialIcons, 
-            (1232, 50),
+            reposition_img(16.5, 0.5),
             WHITE,
             BLACK,
         ),
     )
- 
     def _step():
-        nonlocal gen, traversal
+        nonlocal gen, traversal, maze_state
         if gen != None:
             try:
                 next(gen)
@@ -143,28 +181,40 @@ def _main():
                 PLAYING.to_false()
                 traversal = None
                 gen = None
+                maze_state = MazeState.GENERATED
+        else:
+            maze_state = MazeState.GENERATED
+
 
     def _skip():
-        nonlocal gen, traversal
-        while gen != None:
-            try:
-                next(gen)
-            except:
-                PLAYING.to_false()
-                traversal = None
-                gen = None
+        nonlocal gen, traversal, maze_state, traversal_order, player_coord, index
+        if maze_state == MazeState.GENERATING:
+            while gen != None:
+                try:
+                    next(gen)
+                except:
+                    PLAYING.to_false()
+                    traversal = None
+                    gen = None
+            maze_state = MazeState.GENERATED
+        elif maze_state ==  MazeState.SOLVING:
+            PLAYING.to_false()
+            index = 0
+            traversal_order = []
+            player_coord = (ending_cell.X, ending_cell.Y)
+            maze_state = MazeState.SOLVED
+        
     NEXT_STEP = Button(
         onclick= _skip,
         text=Text(
             'fast_forward',
             screen,
             materialIcons,
-            (1232, 250),
+            reposition_img(16.5,2.5),
             WHITE,
             BLACK,
         ),
     )
-
     def onFPSChange(val:str):
         if val.isdigit():
             CONFIG["FPS_CAP"] = int(val)
@@ -172,21 +222,19 @@ def _main():
             return False
         return True
     
-
     FPS_LABEL = textFont.render('FPS:', True, WHITE, BLACK)
     FPS_LABEL_RECT = FPS_LABEL.get_rect()
-    FPS_LABEL_RECT.center = (1232, 350)
+    FPS_LABEL_RECT.center = reposition_img(16.5, 3.5)
     FPS_FIELD = TextField(
         screen, 
         str(CONFIG['FPS_CAP']), 
-        1232, 
-        400, 
+        reposition_img(16.5, 4)[0], 
+        reposition_img(16.5, 4)[1], 
         textFont, 
         WHITE, 
         BLACK, 
         onSubmit=onFPSChange
     )
-
 
     paths = {
         'northOOB': load_image("assets/paths/northOOB.png", SIZE,SIZE), #0
@@ -209,17 +257,19 @@ def _main():
 
     start()
     _step()
-    player_x:int = start_cell.X
+    player_x:int = start_cell.X or 0
     
-    player_y:int = start_cell.Y
+    player_y:int = start_cell.Y or 0
     
     # Restart button
     def restart():
-        nonlocal player_x, player_y
+        nonlocal player_x, player_y, maze_state
         start()
         player_x = start_cell.X
         player_y = start_cell.Y
+        maze_state = MazeState.GENERATING
         PLAYING.to_false()
+        
         _step()
 
     RESTART_BUTTON = Button(
@@ -228,25 +278,11 @@ def _main():
             'replay',
             screen,
             materialIcons,
-            (1232, 150),
+            reposition_img(16.5, 1.5),
             WHITE, 
             BLACK,
         ),
     )
-
-    def reposition_img(x,y,x_pad=0,y_pad=0):
-        X_START = (x*SIZE) + x_pad
-        Y_START = (y*SIZE) + y_pad
-
-        # original_scale x new_scale + diff
-        # upscaling_factor = 4
-        # downscaling_factor = 3
-        # (1,1) * 4 = (4,4) 
-        # scaled = (4,4) * 3/4 = (3,3)
-        # diff = (4,4)- (3,3) = (1,1)
-        # = (3.5, 3.5) add the half??
-        return (X_START, Y_START)
-
     player_cell = maze[player_y][player_x]
     P_CELL = TextField(
         screen, 
@@ -271,13 +307,9 @@ def _main():
         player_cell = maze[player_y][player_x]
         P_CELL.update(f"({player_x}, {player_y})")
 
-
-        
     player = animator("assets/player/playeridle", "gif", 6, (SIZE-30))
     goal = animator("assets/goal/goal", "gif", 4, (SIZE-45))
-    playerwalk = animator("assets/player/playerwalk", "gif", 4, (SIZE-30))
     building = animator("assets/building/Building", "gif", 3, (SIZE))
-
 
     # Start the game loop 
     while True:
@@ -312,7 +344,6 @@ def _main():
         player_y_pad = 3
         goal_x_pad = 23
         goal_y_pad = 8
-        
         for y in range(length):
             for x in range(width):
                 cell = maze[y][x]
@@ -376,15 +407,14 @@ def _main():
         NEXT_STEP.draw()
         screen.blit(FPS_LABEL, FPS_LABEL_RECT)
         # Draw the player at the starting cell
-        if value == (-1,-1):
-            screen.blit(next(player), reposition_img(player_x, player_y, player_x_pad, player_y_pad))
-        else:
-            xx,yy = reposition_img(value[0], value[1], player_x_pad, player_y_pad)
+        if maze_state == MazeState.SOLVING or maze_state == MazeState.SOLVED: # Compare maze state
+            xx,yy = reposition_img(player_coord[0], player_coord[1], player_x_pad, player_y_pad)
             screen.blit(next(player), (xx,yy))
-            outline_x,outline_y = reposition_img(value[0], value[1])
+            outline_x,outline_y = reposition_img(player_coord[0], player_coord[1])
             pygame.draw.rect(screen, (255,0,0),(outline_x,outline_y,SIZE,SIZE ), 6)
+        else:
+            screen.blit(next(player), reposition_img(player_x, player_y, player_x_pad, player_y_pad))
         screen.blit(next(goal), reposition_img(ending_cell.X, ending_cell.Y, goal_x_pad, goal_y_pad))
-        P_CELL.draw()
         FPS_FIELD.draw()
         # Update the display
         pygame.display.flip()
@@ -392,12 +422,10 @@ def _main():
         pygame.time.Clock().tick(CONFIG['FPS_CAP'])
 
         if PLAYING:
-            if gen == None:
+            if maze_state == MazeState.SOLVING:
                 _solver()
             else:
                 _step()
-        
-  
 
 def main():
     length = 8
