@@ -1,23 +1,11 @@
 import pygame
+from Animator import load_image
 from Cell import Cell
 from prim import prim
 from widgets import BoolVal, Button, Button, Text, TextField
-from maze import make_initial_maze, show_maze
+from maze import make_initial_maze, show_maze, adjacency_list
 from random_dfs import random_dfs
 from depth_first_search import depth_first_search
-
-def load_image(path:str, width:int, length:int, ):
-    """
-    Load an image from the given path and resize it to the specified size.
-
-    Args:
-        path (str): The path to the image file.
-        size (int): The desired size of the image.
-
-    Returns:
-        pygame.Surface: The scaled image.
-    """
-    return pygame.transform.scale(pygame.image.load(path), (width, length))
 def animator(basename: str, file_extension: str, frame_count: int, size, loop=True):
     """
     Generates frames for animation based on the given parameters.
@@ -47,7 +35,6 @@ def animator(basename: str, file_extension: str, frame_count: int, size, loop=Tr
             index += 1
 
 def _main():
-    # maze:list[list[Cell]], start_cell:Cell, ending_cell: Cell, 
     SIZE = 75
     width = 16 #len(maze[0])
     length = 8 #len(maze)
@@ -110,7 +97,7 @@ def _main():
         else:
             raise ValueError(f"Unknown algorithm: {CONFIG['ALGO']}")
     
-    def solve_dfs():
+    def solve_maze():
         nonlocal path, traversal_order, index, maze, start_cell, ending_cell, value, done_solving
         print("solving")
         index = 0
@@ -133,7 +120,7 @@ def _main():
         nonlocal index, done_solving
         PLAYING.to_true()
         if index == 0 or done_solving:
-            solve_dfs()
+            solve_maze()
 
     PLAY_BUTTON_SOLVE = Button(
         onclick= start_or_continue,
@@ -185,6 +172,7 @@ def _main():
             return False
         return True
     
+
     FPS_LABEL = textFont.render('FPS:', True, WHITE, BLACK)
     FPS_LABEL_RECT = FPS_LABEL.get_rect()
     FPS_LABEL_RECT.center = (1232, 350)
@@ -198,6 +186,7 @@ def _main():
         BLACK, 
         onSubmit=onFPSChange
     )
+
 
     paths = {
         'northOOB': load_image("assets/paths/northOOB.png", SIZE,SIZE), #0
@@ -220,9 +209,9 @@ def _main():
 
     start()
     _step()
-    player_x = start_cell.X
+    player_x:int = start_cell.X
     
-    player_y = start_cell.Y
+    player_y:int = start_cell.Y
     
     # Restart button
     def restart():
@@ -258,10 +247,37 @@ def _main():
         # = (3.5, 3.5) add the half??
         return (X_START, Y_START)
 
+    player_cell = maze[player_y][player_x]
+    P_CELL = TextField(
+        screen, 
+        player_cell.__repr__(), 
+        1232, 
+        500, 
+        textFont, 
+        WHITE, 
+        BLACK, 
+    )
+    def player_movement(x_increase, y_increase):
+        nonlocal player_x, player_y, player_cell, maze
+        player_walls = [str(d) for d in player_cell.visited_walls()]
+        if x_increase == -1 and 'W' in player_walls:
+            player_x += x_increase
+        elif x_increase == 1 and 'E' in player_walls:
+            player_x += x_increase
+        if y_increase == -1 and 'N' in player_walls:
+            player_y += y_increase
+        elif y_increase == 1 and 'S' in player_walls:
+            player_y += y_increase
+        player_cell = maze[player_y][player_x]
+        P_CELL.update(f"({player_x}, {player_y})")
+
+
+        
     player = animator("assets/player/playeridle", "gif", 6, (SIZE-30))
     goal = animator("assets/goal/goal", "gif", 4, (SIZE-45))
     playerwalk = animator("assets/player/playerwalk", "gif", 4, (SIZE-30))
     building = animator("assets/building/Building", "gif", 3, (SIZE))
+
 
     # Start the game loop 
     while True:
@@ -284,8 +300,7 @@ def _main():
             FPS_FIELD.listen(event)
             
             if event.type == pygame.KEYDOWN:
-                player_x += int(event.key == pygame.K_d) - int(event.key == pygame.K_a)
-                player_y += int(event.key == pygame.K_s) - int(event.key == pygame.K_w)
+                player_movement(int(event.key == pygame.K_d) - int(event.key == pygame.K_a),int(event.key == pygame.K_s) - int(event.key == pygame.K_w))
                 
             # event.unicode
             # check what letter
@@ -297,6 +312,7 @@ def _main():
         player_y_pad = 3
         goal_x_pad = 23
         goal_y_pad = 8
+        
         for y in range(length):
             for x in range(width):
                 cell = maze[y][x]
@@ -360,13 +376,15 @@ def _main():
         NEXT_STEP.draw()
         screen.blit(FPS_LABEL, FPS_LABEL_RECT)
         # Draw the player at the starting cell
-        if gen == None and not done_solving:
+        if value == (-1,-1):
+            screen.blit(next(player), reposition_img(player_x, player_y, player_x_pad, player_y_pad))
+        else:
             xx,yy = reposition_img(value[0], value[1], player_x_pad, player_y_pad)
             screen.blit(next(player), (xx,yy))
-            pygame.draw.rect(screen, (255,0,0),(xx,yy,SIZE,SIZE ), 6)
-        else:
-            screen.blit(next(player), reposition_img(player_x, player_y, player_x_pad, player_y_pad))
+            outline_x,outline_y = reposition_img(value[0], value[1])
+            pygame.draw.rect(screen, (255,0,0),(outline_x,outline_y,SIZE,SIZE ), 6)
         screen.blit(next(goal), reposition_img(ending_cell.X, ending_cell.Y, goal_x_pad, goal_y_pad))
+        P_CELL.draw()
         FPS_FIELD.draw()
         # Update the display
         pygame.display.flip()

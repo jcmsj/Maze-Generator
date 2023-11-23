@@ -119,6 +119,19 @@ def adjacency_list(maze: list[list[Cell]]) -> dict[str, list[str]]:
                     adj_list[cell_str_representation].append(str(cell_at_direction))
     return adj_list
 
+def matrix_to_adjency_list(maze:list[list[Cell]]):
+    adj_list:dict[Cell, list[Cell]] = {}
+    for y in range(len(maze)):
+        for x in range(len(maze[0])):
+            cell = maze[y][x]
+            adj_list[cell] = []
+            for direction, state in cell.walls.items():
+                if state == State.VISITED:
+                    cell_at_direction = maze[y+direction.value[1]][x+direction.value[0]]
+                    adj_list[cell].append(cell_at_direction)
+
+    return adj_list
+
 def show_maze(maze:list[list[Cell]], start_cell:Cell, ending_cell: Cell):
     """Prints the maze to the stdout by iterating over the y axis then the x axis. Only the north and west walls are checked for each cell to avoid double printing. Checking the East wall is handled by the next cell as that would be its west wall. While the South wall is handled by the cell below it as that would be its north wall."""
     length = len(maze)

@@ -19,3 +19,9 @@ class State(Enum):
 
     def __str__(self):
         return self.name
+
+class MazeState(Enum):
+    GENERATING = 0
+    GENERATED = 1
+    SOLVING = 2
+    SOLVED = 3
