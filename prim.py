@@ -48,10 +48,8 @@ def prim(maze: list[list[Cell]]):
 
                 traversal.append(neighbor)
 
-            
             traversal.append(cell)
 
-    
     end = random_cell(maze)
     return start, end, generator(), maze, traversal
 

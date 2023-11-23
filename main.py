@@ -4,6 +4,7 @@ from prim import prim
 from widgets import BoolVal, Button, Button, Text, TextField
 from maze import make_initial_maze, show_maze
 from random_dfs import random_dfs
+from depth_first_search import depth_first_search
 
 def load_image(path:str, width:int, length:int, ):
     """
@@ -75,6 +76,8 @@ def _main():
             BLACK,
         ),
     )
+
+
     PAUSE_BUTTON = Button(
         onclick= PLAYING.to_false,
         text=Text(
@@ -86,13 +89,17 @@ def _main():
             BLACK,
         ),
     )
-
-
+    done_solving = False
+    value = (-1,-1)
+    index = 0
     gen = None
-    start_cell = None
-    ending_cell = None
+    start_cell:Cell|None = None
+    ending_cell:Cell|None = None
     maze:list[list[Cell]] = []
     traversal = []
+    traversal_order = []
+    path = []
+    done_solving = False
     def start():
         nonlocal start_cell, ending_cell, maze, gen, traversal
         if CONFIG["GENERATOR"] == "random_dfs":
@@ -102,7 +109,44 @@ def _main():
             start_cell, ending_cell, gen, maze,traversal = prim(maze)
         else:
             raise ValueError(f"Unknown algorithm: {CONFIG['ALGO']}")
+    
+    def solve_dfs():
+        nonlocal path, traversal_order, index, maze, start_cell, ending_cell, value, done_solving
+        print("solving")
+        index = 0
+        value = (-1,-1)
+        done_solving = False
+        path, traversal_order = depth_first_search(maze,start_cell,ending_cell)
+        
+    def _solver():
+        nonlocal value, index, done_solving, traversal_order
+        if traversal_order and index < len(traversal_order):
+            value = traversal_order[index]
+            index += 1
+        else:
+            done_solving = True
+            PLAYING.to_false()
+            value = traversal_order[-1]
+            traversal_order = []
 
+    def start_or_continue():
+        nonlocal index, done_solving
+        PLAYING.to_true()
+        if index == 0 or done_solving:
+            solve_dfs()
+
+    PLAY_BUTTON_SOLVE = Button(
+        onclick= start_or_continue,
+        text=Text(
+            'circle', 
+            screen, 
+            materialIcons, 
+            (1232, 50),
+            WHITE,
+            BLACK,
+        ),
+    )
+ 
     def _step():
         nonlocal gen, traversal
         if gen != None:
@@ -217,6 +261,7 @@ def _main():
     player = animator("assets/player/playeridle", "gif", 6, (SIZE-30))
     goal = animator("assets/goal/goal", "gif", 4, (SIZE-45))
     playerwalk = animator("assets/player/playerwalk", "gif", 4, (SIZE-30))
+    building = animator("assets/building/Building", "gif", 3, (SIZE))
 
     # Start the game loop 
     while True:
@@ -224,10 +269,16 @@ def _main():
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit()
-            if PLAYING:
-                PAUSE_BUTTON.listen(event)
-            else: 
-                PLAY_BUTTON.listen(event)
+            if gen == None:
+                if PLAYING:
+                    PAUSE_BUTTON.listen(event)
+                else: 
+                    PLAY_BUTTON_SOLVE.listen(event)
+            else:
+                if PLAYING:
+                    PAUSE_BUTTON.listen(event)
+                else: 
+                    PLAY_BUTTON.listen(event)
             RESTART_BUTTON.listen(event)
             NEXT_STEP.listen(event)
             FPS_FIELD.listen(event)
@@ -285,20 +336,36 @@ def _main():
                     screen.blit(paths['southOOB'], position)
                 else: 
                     pass
-                if PLAYING and traversal and cell == traversal[-1]:
-                    # draw a red tile
-                    xx,yy = position
-                    pygame.draw.rect(screen, (255,0,0),(xx,yy,SIZE,SIZE ), 6)
+                if traversal and cell == traversal[-1]:
+                    # draw the building sprite
+                    screen.blit(next(building),position)
         # Draw the play button
-        if PLAYING:
-            PAUSE_BUTTON.draw()
+
+
+        # For the DFS Solver
+        if gen != None:
+            # show the UI for generating
+            if PLAYING:
+                PAUSE_BUTTON.draw()
+            else:
+                PLAY_BUTTON.draw()
         else:
-            PLAY_BUTTON.draw()
+            # show the UI for solving
+            if PLAYING:
+                PAUSE_BUTTON.draw()
+            else:
+                PLAY_BUTTON_SOLVE.draw()
+           
         RESTART_BUTTON.draw()
         NEXT_STEP.draw()
         screen.blit(FPS_LABEL, FPS_LABEL_RECT)
         # Draw the player at the starting cell
-        screen.blit(next(player), reposition_img(player_x, player_y, player_x_pad, player_y_pad))
+        if gen == None and not done_solving:
+            xx,yy = reposition_img(value[0], value[1], player_x_pad, player_y_pad)
+            screen.blit(next(player), (xx,yy))
+            pygame.draw.rect(screen, (255,0,0),(xx,yy,SIZE,SIZE ), 6)
+        else:
+            screen.blit(next(player), reposition_img(player_x, player_y, player_x_pad, player_y_pad))
         screen.blit(next(goal), reposition_img(ending_cell.X, ending_cell.Y, goal_x_pad, goal_y_pad))
         FPS_FIELD.draw()
         # Update the display
@@ -307,7 +374,12 @@ def _main():
         pygame.time.Clock().tick(CONFIG['FPS_CAP'])
 
         if PLAYING:
-            _step()
+            if gen == None:
+                _solver()
+            else:
+                _step()
+        
+  
 
 def main():
     length = 8

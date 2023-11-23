@@ -6,22 +6,19 @@ def depth_first_search(maze: list[list[Cell]], start:Cell, end:Cell):
     """Run depth first search on a matrix representation of the maze. Returns a tuple containing the path and the entire traversal order"""
     stack = [(start, [(start.X, start.Y)])]
     visited = set()
-    traversal_order = []
+    traversal_order = [(start.X, start.Y)]
     while stack:
         current, path = stack.pop()
 
         coord = (current.X, current.Y)
         # Every loop, add the current cell's coordinate to the traversal list
-        traversal_order.append(coord)
-
         if coord == (end.X, end.Y):
+            traversal_order.append(coord)
             return path, traversal_order
-
         if current not in visited:
             visited.add(current)
-
-            neighbors = [neighbor for neighbor, state in current.walls.items() if state == State.VISITED]
-            for neighbor in neighbors:
+            traversal_order.append(coord)
+            for neighbor in current.visited_walls():
                 next_cell = maze[current.Y + neighbor.value[1]][current.X + neighbor.value[0]]
                 stack.append((next_cell, path + [(next_cell.X, next_cell.Y)]))
 
