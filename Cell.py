@@ -30,6 +30,9 @@ class Cell:
         # and the chosen cell
         other.walls[d.inverse()] = State.VISITED
 
+    @property
+    def coordinate(self):
+        return (self.X, self.Y)
     @classmethod
     def from_str(cls, s:str):
         digit_scanner = re.compile('\\d+')
