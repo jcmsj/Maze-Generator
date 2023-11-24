@@ -47,7 +47,7 @@ class BoolVal(Val[bool]):
         return self._val
     
 class TextField:
-    def __init__(self, screen, text:str, x:int, y:int, font:pygame.font.Font, color:tuple[int,int,int], background_color:tuple[int,int,int], onSubmit: Callable[[str], None|bool] | None = None  ):
+    def __init__(self, screen, text:str,location: tuple[int,int], font:pygame.font.Font, color:tuple[int,int,int], background_color:tuple[int,int,int], onSubmit: Callable[[str], None|bool] | None = None  ):
         """
         Represents a text field on the screen.
 
@@ -63,14 +63,13 @@ class TextField:
         """
         self.screen = screen
         self.text = text
-        self.x = x
-        self.y = y
+        self.location = location
         self.font = font
         self.color = color
         self.background_color = background_color
         self.field = self.font.render(self.text, True, self.color, self.background_color)
         self.textRect = self.field.get_rect()
-        self.textRect.center = (self.x, self.y)
+        self.textRect.center = location
         self.focused = False
         self.onSubmit = onSubmit
         self.previous_text = self.text
@@ -92,7 +91,7 @@ class TextField:
         self.text = text
         self.field = self.font.render(self.text, True, self.color, self.background_color)
         self.textRect = self.field.get_rect()
-        self.textRect.center = (self.x, self.y)
+        self.textRect.center = self.location
 
     def listen(self, event:pygame.event.Event):
         """

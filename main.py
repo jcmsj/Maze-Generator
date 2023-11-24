@@ -103,7 +103,7 @@ def _main():
     ending_cell = None
     maze:list[list[Cell]] = []
     traversal = []
-    traversal_order = []
+    traversal_order:list[tuple[int,int]] = []
     path = []
     def start():
         nonlocal start_cell, ending_cell, maze, gen, traversal, traversal_order, index, player_coord, path
@@ -119,12 +119,12 @@ def _main():
         elif CONFIG["SOLVER"] == "depth_first_search":
             path, traversal_order = depth_first_search(maze, start_cell, ending_cell)
         elif CONFIG["SOLVER"] == "a_star": 
-            traversal_order = a_star_search({
+            _traversal_order = a_star_search({
             "start": start_cell,
             "end": ending_cell,
             "graph": matrix_to_adjency_list(maze),
             }) or []
-            traversal_order = [(cell.X, cell.Y) for cell in traversal_order]
+            traversal_order = [cell.coordinate for cell in _traversal_order]
         elif CONFIG["SOLVER"] == "breadth_first_search": 
             start_cell, ending_cell, gen, maze,traversal = random_dfs(length=length,width=width)
         else:
@@ -134,13 +134,13 @@ def _main():
         nonlocal path, traversal_order, index, maze, start_cell, ending_cell, player_coord, maze_state
         print("solving")
         maze_state = MazeState.SOLVING
-        traversal_order = a_star_search({
+        _traversal_order = a_star_search({
             "start": start_cell,
             "end": ending_cell,
             "graph": matrix_to_adjency_list(maze),
         }) or []
-        traversal_order = [(cell.X, cell.Y) for cell in traversal_order]
-        player_coord = (start_cell.X, start_cell.Y)
+        traversal_order = [cell.coordinate for cell in _traversal_order]
+        player_coord = start_cell.coordinate
         index = 0
         
     def _solver():
@@ -153,7 +153,7 @@ def _main():
             PLAYING.to_false()
             index = 0
             traversal_order = []
-            player_coord = (ending_cell.X, ending_cell.Y)
+            player_coord = ending_cell.coordinate
 
     def start_or_continue():
         nonlocal index, maze_state
@@ -201,10 +201,10 @@ def _main():
             PLAYING.to_false()
             index = 0
             traversal_order = []
-            player_coord = (ending_cell.X, ending_cell.Y)
+            player_coord = ending_cell.coordinate
             maze_state = MazeState.SOLVED
         
-    NEXT_STEP = Button(
+    FAST_FORWARD = Button(
         onclick= _skip,
         text=Text(
             'fast_forward',
@@ -228,8 +228,7 @@ def _main():
     FPS_FIELD = TextField(
         screen, 
         str(CONFIG['FPS_CAP']), 
-        reposition_img(16.5, 4)[0], 
-        reposition_img(16.5, 4)[1], 
+        reposition_img(16.5, 4), 
         textFont, 
         WHITE, 
         BLACK, 
@@ -287,8 +286,7 @@ def _main():
     P_CELL = TextField(
         screen, 
         player_cell.__repr__(), 
-        1232, 
-        500, 
+        reposition_img(16.5,5), 
         textFont, 
         WHITE, 
         BLACK, 
@@ -317,18 +315,18 @@ def _main():
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit()
-            if gen == None:
-                if PLAYING:
-                    PAUSE_BUTTON.listen(event)
-                else: 
-                    PLAY_BUTTON_SOLVE.listen(event)
-            else:
+            if maze_state == MazeState.GENERATING:
                 if PLAYING:
                     PAUSE_BUTTON.listen(event)
                 else: 
                     PLAY_BUTTON.listen(event)
+            else:
+                if PLAYING:
+                    PAUSE_BUTTON.listen(event)
+                else: 
+                    PLAY_BUTTON_SOLVE.listen(event)
             RESTART_BUTTON.listen(event)
-            NEXT_STEP.listen(event)
+            FAST_FORWARD.listen(event)
             FPS_FIELD.listen(event)
             
             if event.type == pygame.KEYDOWN:
@@ -386,11 +384,9 @@ def _main():
                 if traversal and cell == traversal[-1]:
                     # draw the building sprite
                     screen.blit(next(building),position)
-        # Draw the play button
-
 
         # For the DFS Solver
-        if gen != None:
+        if maze_state == MazeState.GENERATING:
             # show the UI for generating
             if PLAYING:
                 PAUSE_BUTTON.draw()
@@ -404,7 +400,7 @@ def _main():
                 PLAY_BUTTON_SOLVE.draw()
            
         RESTART_BUTTON.draw()
-        NEXT_STEP.draw()
+        FAST_FORWARD.draw()
         screen.blit(FPS_LABEL, FPS_LABEL_RECT)
         # Draw the player at the starting cell
         if maze_state == MazeState.SOLVING or maze_state == MazeState.SOLVED: # Compare maze state
@@ -416,6 +412,7 @@ def _main():
             screen.blit(next(player), reposition_img(player_x, player_y, player_x_pad, player_y_pad))
         screen.blit(next(goal), reposition_img(ending_cell.X, ending_cell.Y, goal_x_pad, goal_y_pad))
         FPS_FIELD.draw()
+        P_CELL.draw()
         # Update the display
         pygame.display.flip()
         # limit FPS
