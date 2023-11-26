@@ -42,12 +42,13 @@ class Cell:
     def __str__(self) -> str:
         return self.__repr__()
     
+    # For excluvise use in A*
     def __lt__(self, other):
         """ To support using < operator """
-        return self.X < other.X and self.Y < other.Y
+        return False
     def __le__(self, other):
         """ To support using <= operator """
-        return self.X <= other.X and self.Y <= other.Y
+        return False
     
     def __doc__(self):
         """Represents a cell in a grid.

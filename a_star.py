@@ -28,12 +28,12 @@ def a_star_search(maze_info):
   
         _, current_cell= queue.get()
         if current_cell == ending_cell:
+            visited_cells.append(current_cell)
             path_list:list[Cell] = [ending_cell]
             while path[path_list[-1]] is not None:
                 path_list.append(path[path_list[-1]]) # type: ignore since the check above is not None
             path_list.reverse()
-            return visited_cells
-
+            return path_list, visited_cells
         for neighbor in maze[current_cell]:
             new_cost = cost_so_far[current_cell] + 1
             if neighbor not in cost_so_far or new_cost < cost_so_far[neighbor]:
@@ -41,11 +41,11 @@ def a_star_search(maze_info):
                 priority = new_cost + heuristic(ending_cell, neighbor)
                 queue.put((priority, neighbor))  
                 path[neighbor] = current_cell
-                if neighbor not in visited_cells:  
+                if neighbor not in visited_cells: 
                     visited_cells.append(neighbor)
-
+               
     # If ending cell was not found, return None
-    return None
+    return None, visited_cells
 def parse_cli_args() :
     from argparse import ArgumentParser
     from sys import argv

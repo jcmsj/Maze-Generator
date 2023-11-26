@@ -199,7 +199,7 @@ def _main():
         if CONFIG["SOLVER"].value == "depth_first_search":
             path, traversal_order = depth_first_search(maze, start_cell, ending_cell)
         elif CONFIG["SOLVER"].value == "a_star": 
-            _traversal_order = a_star_search({
+            path, _traversal_order = a_star_search({
             "start": start_cell,
             "end": ending_cell,
             "graph": matrix_to_adjency_list(maze),
@@ -324,11 +324,6 @@ def _main():
             messagebox.showerror("Error", "Failed to load maze. Invalid data")
             return
         solve_maze()
-        # The following lines are a workaround to make the search algos radio buttons show after loading a file
-        # TODO: Fix this workaround
-        nonlocal maze_state
-        maze_state = MazeState.GENERATED
-        _skip()
 
     LOAD_BUTTON = Button(
         onclick= load_file_path,
@@ -515,7 +510,7 @@ def _main():
         if maze_state == MazeState.GENERATING:
             for buttons in GENERATOR_RADIO_BUTTONS:
                 buttons.draw(screen)
-        if maze_state == MazeState.SOLVED or maze_state == MazeState.GENERATED:
+        else:
             for buttons in SOLVER_RADIO_BUTTONS:
                 buttons.draw(screen)
          
