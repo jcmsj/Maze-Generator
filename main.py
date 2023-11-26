@@ -2,7 +2,7 @@ import pygame
 from State import MazeState
 from Cell import Cell
 from prim import prim
-from widgets import BoolVal, Button, Button, Text, TextField
+from widgets import BoolVal, Button, Button, Text, TextField, RadioButton, Val
 from maze import make_initial_maze, matrix_to_adjency_list, show_maze, adjacency_list
 from random_dfs import random_dfs
 from depth_first_search import depth_first_search
@@ -63,15 +63,120 @@ def _main():
     WHITE = (255, 255, 255)
     CONFIG = {
         "FPS_CAP": 30,
-        "GENERATOR": "random_dfs",
+        "GENERATOR": Val("random_dfs"),
         "ALGOS": ["random_dfs", "prim"],
-        "SOLVER": ["breadth_first_search", "depth_first_search", "a_star" ]
+        "SOLVER": Val("depth_first_search"),
+        "SOLVER_ALGOS": ["breadth_first_search", "depth_first_search", "a_star" ]
     }
+    
+    # CURRYING MOMENTS
+    def curried_select(config_key:str, ):
+        def set_group(radiobuttons:list["RadioButton"]):
+            def set_choice(choice):
+                def execute():
+                    CONFIG[config_key].set(choice)
+                    print(CONFIG[config_key].value)
+                    for btn in radiobuttons:
+                        btn.checked = btn.assigned == choice
+                return execute
+            return set_choice
+        return set_group
+
+    SOLVER_RADIO_BUTTONS = [
+        RadioButton(
+            assigned = "a_star",
+            text = 'A*',
+            x = 250,
+            y = 630,
+            
+        ),
+        RadioButton(
+            assigned = 'breadth_first_search',
+            text = 'BFS',
+            x = 500,
+            y = 630,
+        ),
+        RadioButton(
+            assigned = 'depth_first_search',
+            text = 'DFS',
+            x = 750,
+            y = 630,
+            checked = True
+        )
+    ]
+
+    GENERATOR_RADIO_BUTTONS = [
+        RadioButton(
+            text = 'random_dfs',
+            assigned = "random_dfs",
+            x = 250,
+            y = 615,
+            checked=True
+        ),
+        RadioButton(
+            text = 'prim',
+            assigned = 'prim',
+            x = 500,
+            y = 615,
+        ),
+    ]
+
+    set_solver_algo = curried_select("SOLVER")(SOLVER_RADIO_BUTTONS)
+    set_generator_algo = curried_select("GENERATOR")(GENERATOR_RADIO_BUTTONS)
+
+    for button in SOLVER_RADIO_BUTTONS:
+        button.onclick = set_solver_algo(button.assigned)
+
+    for button in GENERATOR_RADIO_BUTTONS:
+        button.onclick = set_generator_algo(button.assigned)
+
     def reposition_img(x:int|float,y:int|float,x_pad=0,y_pad=0):
         X_START:int = (x*SIZE) + x_pad # type: ignore
         Y_START:int = (y*SIZE) + y_pad # type: ignore
         return (X_START, Y_START)
     PLAYING = BoolVal(False)
+
+    maze_state = MazeState.GENERATING
+    player_coord = (-1,-1)
+    index = 0
+    gen = None
+    start_cell = None
+    ending_cell = None
+    maze:list[list[Cell]] = []
+    traversal = []
+    traversal_order:list[tuple[int,int]] = []
+    path = []
+    def start(args=None):
+        nonlocal start_cell, ending_cell, maze, gen, traversal, traversal_order, index, player_coord, path, player_x, player_y, maze_state
+        traversal_order = []
+        index = 0
+        
+        if CONFIG["GENERATOR"].value == "random_dfs":
+            start_cell, ending_cell, gen, maze,traversal = random_dfs(length=length,width=width)
+
+        elif CONFIG["GENERATOR"].value == "prim":
+            maze = make_initial_maze(length=length,width=width)
+            start_cell, ending_cell, gen, maze,traversal = prim(maze)
+            
+        # elif CONFIG["SOLVER"] == "depth_first_search":
+        #     path, traversal_order = depth_first_search(maze, start_cell, ending_cell)
+        # elif CONFIG["SOLVER"] == "a_star": 
+        #     _traversal_order = a_star_search({
+        #     "start": start_cell,
+        #     "end": ending_cell,
+        #     "graph": matrix_to_adjency_list(maze),
+        #     }) or []
+        #     traversal_order = [cell.coordinate for cell in _traversal_order]
+        # elif CONFIG["SOLVER"] == "breadth_first_search": 
+        #     start_cell, ending_cell, gen, maze,traversal = random_dfs(length=length,width=width)
+        # else:
+        #     raise ValueError(f"Unknown algorithm: {CONFIG['ALGO']}")
+        
+        player_x = start_cell.X
+        player_y = start_cell.Y
+        maze_state = MazeState.GENERATING
+        PLAYING.to_false()
+    CONFIG["GENERATOR"].observers.append(start)
     PLAY_BUTTON = Button(
         onclick= PLAYING.to_true,
         text=Text(
@@ -81,7 +186,7 @@ def _main():
             reposition_img(16.5, 0.5),
             WHITE,
             BLACK,
-        ),
+        )
     )
 
     PAUSE_BUTTON = Button(
@@ -95,54 +200,26 @@ def _main():
             BLACK,
         ),
     )
-    maze_state = MazeState.GENERATING
-    player_coord = (-1,-1)
-    index = 0
-    gen = None
-    start_cell = None
-    ending_cell = None
-    maze:list[list[Cell]] = []
-    traversal = []
-    traversal_order:list[tuple[int,int]] = []
-    path = []
-    def start():
-        nonlocal start_cell, ending_cell, maze, gen, traversal, traversal_order, index, player_coord, path
-        traversal_order = []
+    def solve_dfs():
+        nonlocal path, traversal_order, index, maze, start_cell, ending_cell, player_coord, maze_state
+        print("solving")
+        maze_state = MazeState.SOLVING
+        player_coord = start_cell.coordinate
         index = 0
-        if CONFIG["GENERATOR"] == "random_dfs":
-            start_cell, ending_cell, gen, maze,traversal = random_dfs(length=length,width=width)
-        elif CONFIG["GENERATOR"] == "prim":
-            maze = make_initial_maze(length=length,width=width)
-            start_cell, ending_cell, gen, maze,traversal = prim(maze)
-
-            
-        elif CONFIG["SOLVER"] == "depth_first_search":
+        if CONFIG["SOLVER"].value == "depth_first_search":
             path, traversal_order = depth_first_search(maze, start_cell, ending_cell)
-        elif CONFIG["SOLVER"] == "a_star": 
+        elif CONFIG["SOLVER"].value == "a_star": 
             _traversal_order = a_star_search({
             "start": start_cell,
             "end": ending_cell,
             "graph": matrix_to_adjency_list(maze),
             }) or []
             traversal_order = [cell.coordinate for cell in _traversal_order]
-        elif CONFIG["SOLVER"] == "breadth_first_search": 
-            start_cell, ending_cell, gen, maze,traversal = random_dfs(length=length,width=width)
+        elif CONFIG["SOLVER"].value == "breadth_first_search": 
+            # start_cell, ending_cell, maze, = random_dfs(length=length,width=width)
+            pass
         else:
             raise ValueError(f"Unknown algorithm: {CONFIG['ALGO']}")
-
-    def solve_dfs():
-        nonlocal path, traversal_order, index, maze, start_cell, ending_cell, player_coord, maze_state
-        print("solving")
-        maze_state = MazeState.SOLVING
-        _traversal_order = a_star_search({
-            "start": start_cell,
-            "end": ending_cell,
-            "graph": matrix_to_adjency_list(maze),
-        }) or []
-        traversal_order = [cell.coordinate for cell in _traversal_order]
-        player_coord = start_cell.coordinate
-        index = 0
-        
     def _solver():
         nonlocal player_coord, index, maze_state, traversal_order
         if traversal_order and index < len(traversal_order):
@@ -184,7 +261,6 @@ def _main():
                 maze_state = MazeState.GENERATED
         else:
             maze_state = MazeState.GENERATED
-
 
     def _skip():
         nonlocal gen, traversal, maze_state, traversal_order, player_coord, index
@@ -255,24 +331,11 @@ def _main():
     }
 
     start()
-    _step()
     player_x:int = start_cell.X or 0
     
     player_y:int = start_cell.Y or 0
-    
-    # Restart button
-    def restart():
-        nonlocal player_x, player_y, maze_state
-        start()
-        player_x = start_cell.X
-        player_y = start_cell.Y
-        maze_state = MazeState.GENERATING
-        PLAYING.to_false()
-        
-        _step()
-
     RESTART_BUTTON = Button(
-        onclick= restart,
+        onclick= start,
         text=Text(
             'replay',
             screen,
@@ -282,6 +345,7 @@ def _main():
             BLACK,
         ),
     )
+    
     player_cell = maze[player_y][player_x]
     P_CELL = TextField(
         screen, 
@@ -309,6 +373,7 @@ def _main():
     goal = animator("assets/goal/goal", "gif", 4, (SIZE-45))
     building = animator("assets/building/Building", "gif", 3, (SIZE))
 
+    
     # Start the game loop 
     while True:
         # Check for events
@@ -319,8 +384,13 @@ def _main():
                 if PLAYING:
                     PAUSE_BUTTON.listen(event)
                 else: 
+                    for button in GENERATOR_RADIO_BUTTONS:
+                        button.listen(event)
                     PLAY_BUTTON.listen(event)
             else:
+                for button in SOLVER_RADIO_BUTTONS:
+                    button.listen(event)
+                
                 if PLAYING:
                     PAUSE_BUTTON.listen(event)
                 else: 
@@ -398,7 +468,12 @@ def _main():
                 PAUSE_BUTTON.draw()
             else:
                 PLAY_BUTTON_SOLVE.draw()
-           
+
+        for buttons in SOLVER_RADIO_BUTTONS:
+            buttons.draw(screen)
+
+        for buttons in GENERATOR_RADIO_BUTTONS:
+            buttons.draw(screen)
         RESTART_BUTTON.draw()
         FAST_FORWARD.draw()
         screen.blit(FPS_LABEL, FPS_LABEL_RECT)

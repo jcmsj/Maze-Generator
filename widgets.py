@@ -1,11 +1,13 @@
 import pygame
+import sys
 from typing import Callable
 from typing import TypeVar
 
 T = TypeVar("T")
 class Val[T]:
-    def __init__(self, val:T):
+    def __init__(self, val:T, observers=None):
         self._val:T = val
+        self.observers:list[Callable[[bool], None]] = observers if observers is not None else []
 
     def __repr__(self):
         return f"Val({self._val})"
@@ -20,13 +22,14 @@ class Val[T]:
         return hash(self._val)
     def set(self, val):
         self._val = val
+        for observer in self.observers:
+            observer(self._val)
+
     @property
     def value(self) -> T:
         return self._val
     
 class BoolVal(Val[bool]):
-    def __init__(self, val:bool):
-        super().__init__(val)
     def toggle(self):
         self.set(not self._val)
     def to_true(self):
@@ -176,3 +179,26 @@ class Button:
             if self.text.rect.collidepoint(event.pos):
                 print(f"Btn[{self.text._label}]: onClick")
                 self.onclick()
+
+class RadioButton:
+    
+    def __init__(self, assigned, text, x, y, checked =False, onclick = None):
+        self.rect = pygame.Rect(x, y, 12, 12)
+        self.assigned = assigned
+        self.text = text
+        self.checked = checked
+        self.onclick = onclick
+    def draw(self, screen):
+        pygame.draw.rect(screen, (255, 255, 255), self.rect, 0 if self.checked else 1)
+        font = pygame.font.Font(None, 24)
+        label = font.render(self.text, 1, (255,255,255))
+        screen.blit(label, (self.rect.x + 20, self.rect.y))
+    def listen(self, event:pygame.event.Event):
+        if self.onclick == None:
+            return
+        
+        if event.type == pygame.MOUSEBUTTONUP:
+            if self.rect.collidepoint(event.pos):
+                print("onClick")
+                self.onclick()
+                    
