@@ -94,7 +94,7 @@ def as_matrix(adjacency_list: dict[Cell, list[Cell]]):
 
     return matrix
 
-def adjacency_list(maze: list[list[Cell]]) -> dict[str, list[str]]:
+def matrox_to_str_adjency_list(maze: list[list[Cell]]) -> dict[str, list[str]]:
     """
     Generates an adjacency list representation of the given maze.
 
@@ -166,14 +166,14 @@ def show_maze(maze:list[list[Cell]], start_cell:Cell, ending_cell: Cell):
     print("+---"*width, end="")
     print('+')
 
-def export_file(maze: dict[str,list[str]], traversal:list[Cell], startEnd:tuple[Cell,Cell], filepath:str):
+def export_file(maze: dict[str,list[str]], startEnd:tuple[Cell,Cell],filepath:str, traversal=None , graphKey="graph"):
     import json
     with open(filepath, 'w') as f:
         json.dump({
             "start": str(startEnd[0]),
-            "maze": maze,
-            "traversal": [str(path) for path in traversal],
-            "end": str(startEnd[1])
+            graphKey: maze,
+            "end": str(startEnd[1]),
+            "traversal": [str(node) for node in traversal] if traversal is not None else []
         }, f, indent=2)
 
 def import_file(path:str):
@@ -181,9 +181,9 @@ def import_file(path:str):
     with open(path, 'r') as f:
         return json.load(f)
 
-def import_maze_details(path:str):
+def import_maze_details(path:str, graphKey="graph"):
     raw = import_file(path)
-    maze: dict[str, list[str]] = raw['maze']
+    maze: dict[str, list[str]] = raw[graphKey]
     start = raw['start']
     end = raw['end']
     adj_list:dict[Cell, list[Cell]] = {}
@@ -196,12 +196,9 @@ def import_maze_details(path:str):
         adj_list[cell] = [converted_nodes[raw_neighbor] for raw_neighbor in raw_neighbors]
 
     return {
-        "graph": adj_list,
+        graphKey: adj_list,
         "start": converted_nodes[start],
         "end": converted_nodes[end],
-        # TODO: Convert the solution to a list of Cells and directions
-        # TODO: Apparently, this is the actual traversal not only the solution
-        "traversal": raw['traversal'],
     }
 
 # Create a cli args parser that accepts a json file and prints the maze

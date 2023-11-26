@@ -1,7 +1,7 @@
 from random import choice, randint
 from Cell import Cell
 from Direction import Direction
-from maze import adjacency_list, export_file, make_initial_maze, random_cell
+from maze import matrox_to_str_adjency_list, export_file, make_initial_maze, random_cell
 
 def prim(maze: list[list[Cell]]):
     """ based on Iterative Prim:\n
@@ -23,7 +23,6 @@ def prim(maze: list[list[Cell]]):
     # Make use of a generator, because for the GUIs, we want to show the maze being generated, step by step. This can be most conveniently done with a generator.
     traversal = [start]
     def generator():
-        yield maze, traversal
         direction = choice(start.unvisited_walls())
         neighbor = get_neighbor(start, direction)
         # 2.1 mark it as part of the maze.
@@ -31,8 +30,8 @@ def prim(maze: list[list[Cell]]):
         # 2.2 Add the walls of starting cell to the wall list.
         walls = [(start, d) for d in  start.non_blocked_walls()]
         # 3. While there are walls in the list
+        yield maze, traversal
         while len(walls) > 0:
-            yield maze, traversal
             # 3.1 and 3.3: Remove a random wall from the list.
             # In contrast to the wikipedia article, it is faster to remove the cell immediately than do so later on since:
             #   1. the list will get bigger,
@@ -44,11 +43,9 @@ def prim(maze: list[list[Cell]]):
                 # 3.2.1 Make the wall a passage and mark the unvisited cell as part of the maze.
                 cell.visit(neighbor, direction)
                 # 3.2.2 Add the neighboring walls of the cell to the wall list.
-                walls.extend([(neighbor, d) for d in neighbor.non_blocked_walls()])
-
+                walls.extend([(neighbor, d) for d in neighbor.unvisited_walls()])
                 traversal.append(neighbor)
-
-            traversal.append(cell)
+                yield maze, traversal
 
     end = random_cell(maze)
     return start, end, generator(), maze, traversal
@@ -75,8 +72,8 @@ def main():
         for m,t in maze_generator:
             pass
         if args.export:
-            maze_details = adjacency_list(maze)
-            export_file(maze_details, traversal, (STARTING_CELL, ENDING_CELL), args.export)
+            maze_details = matrox_to_str_adjency_list(maze)
+            export_file(maze_details, (STARTING_CELL, ENDING_CELL), args.export, traversal)
 
 if __name__ == '__main__':
     main()

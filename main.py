@@ -1,9 +1,10 @@
 import pygame
 from State import MazeState
 from Cell import Cell
+from breadth_first_search import breadth_first_search
 from prim import prim
 from widgets import BoolVal, Button, Button, Text, TextField, RadioButton, Val
-from maze import make_initial_maze, matrix_to_adjency_list, show_maze, adjacency_list
+from maze import as_matrix, export_file, import_file, import_maze_details, make_initial_maze, matrix_to_adjency_list, show_maze, matrox_to_str_adjency_list
 from random_dfs import random_dfs
 from depth_first_search import depth_first_search
 from a_star import a_star_search
@@ -46,6 +47,12 @@ def animator(basename: str, file_extension: str, frame_count: int, size, loop=Tr
         while index < len(frames):
             yield frames[index]
             index += 1
+def tile_position(SIZE:int):
+    def reposition(x:int|float,y:int|float,x_pad=0,y_pad=0):
+        X_START:int = (x*SIZE) + x_pad # type: ignore
+        Y_START:int = (y*SIZE) + y_pad # type: ignore
+        return (X_START, Y_START)
+    return reposition
 
 def _main():
     SIZE = 75
@@ -68,10 +75,11 @@ def _main():
         "SOLVER": Val("depth_first_search"),
         "SOLVER_ALGOS": ["breadth_first_search", "depth_first_search", "a_star" ]
     }
-    
+
     # CURRYING MOMENTS
+    reposition_img = tile_position(SIZE)
     def curried_select(config_key:str, ):
-        def set_group(radiobuttons:list["RadioButton"]):
+        def set_group(radiobuttons:list[RadioButton]):
             def set_choice(choice):
                 def execute():
                     CONFIG[config_key].set(choice)
@@ -86,37 +94,36 @@ def _main():
         RadioButton(
             assigned = "a_star",
             text = 'A*',
-            x = 250,
-            y = 630,
-            
+            x = 150,
+            y = 615,
         ),
         RadioButton(
             assigned = 'breadth_first_search',
             text = 'BFS',
-            x = 500,
-            y = 630,
+            x = 400,
+            y = 615,
         ),
         RadioButton(
             assigned = 'depth_first_search',
             text = 'DFS',
-            x = 750,
-            y = 630,
+            x = 650,
+            y = 615,
             checked = True
         )
     ]
 
     GENERATOR_RADIO_BUTTONS = [
         RadioButton(
-            text = 'random_dfs',
+            text = 'Random DFS',
             assigned = "random_dfs",
-            x = 250,
+            x = 150,
             y = 615,
             checked=True
         ),
         RadioButton(
-            text = 'prim',
+            text = 'Prim',
             assigned = 'prim',
-            x = 500,
+            x = 400,
             y = 615,
         ),
     ]
@@ -130,10 +137,7 @@ def _main():
     for button in GENERATOR_RADIO_BUTTONS:
         button.onclick = set_generator_algo(button.assigned)
 
-    def reposition_img(x:int|float,y:int|float,x_pad=0,y_pad=0):
-        X_START:int = (x*SIZE) + x_pad # type: ignore
-        Y_START:int = (y*SIZE) + y_pad # type: ignore
-        return (X_START, Y_START)
+
     PLAYING = BoolVal(False)
 
     maze_state = MazeState.GENERATING
@@ -158,20 +162,6 @@ def _main():
             maze = make_initial_maze(length=length,width=width)
             start_cell, ending_cell, gen, maze,traversal = prim(maze)
             
-        # elif CONFIG["SOLVER"] == "depth_first_search":
-        #     path, traversal_order = depth_first_search(maze, start_cell, ending_cell)
-        # elif CONFIG["SOLVER"] == "a_star": 
-        #     _traversal_order = a_star_search({
-        #     "start": start_cell,
-        #     "end": ending_cell,
-        #     "graph": matrix_to_adjency_list(maze),
-        #     }) or []
-        #     traversal_order = [cell.coordinate for cell in _traversal_order]
-        # elif CONFIG["SOLVER"] == "breadth_first_search": 
-        #     start_cell, ending_cell, gen, maze,traversal = random_dfs(length=length,width=width)
-        # else:
-        #     raise ValueError(f"Unknown algorithm: {CONFIG['ALGO']}")
-        
         player_x = start_cell.X
         player_y = start_cell.Y
         maze_state = MazeState.GENERATING
@@ -180,7 +170,7 @@ def _main():
     PLAY_BUTTON = Button(
         onclick= PLAYING.to_true,
         text=Text(
-            'play_arrow', 
+            'construction', 
             screen, 
             materialIcons, 
             reposition_img(16.5, 0.5),
@@ -200,7 +190,7 @@ def _main():
             BLACK,
         ),
     )
-    def solve_dfs():
+    def solve_maze():
         nonlocal path, traversal_order, index, maze, start_cell, ending_cell, player_coord, maze_state
         print("solving")
         maze_state = MazeState.SOLVING
@@ -216,10 +206,9 @@ def _main():
             }) or []
             traversal_order = [cell.coordinate for cell in _traversal_order]
         elif CONFIG["SOLVER"].value == "breadth_first_search": 
-            # start_cell, ending_cell, maze, = random_dfs(length=length,width=width)
-            pass
+            path, traversal_order = breadth_first_search(matrix_to_adjency_list(maze), start_cell, ending_cell)
         else:
-            raise ValueError(f"Unknown algorithm: {CONFIG['ALGO']}")
+            raise ValueError(f"Unknown algorithm: {CONFIG['SOLVER']}")
     def _solver():
         nonlocal player_coord, index, maze_state, traversal_order
         if traversal_order and index < len(traversal_order):
@@ -230,18 +219,18 @@ def _main():
             PLAYING.to_false()
             index = 0
             traversal_order = []
-            player_coord = ending_cell.coordinate
+            # player_coord = ending_cell.coordinate
 
-    def start_or_continue():
+    def start_search_or_continue():
         nonlocal index, maze_state
         PLAYING.to_true()
         if maze_state == MazeState.SOLVED or maze_state == MazeState.GENERATED:
-            solve_dfs()
+            solve_maze()
         
-    PLAY_BUTTON_SOLVE = Button(
-        onclick= start_or_continue,
+    SEARCH_BUTTON = Button(
+        onclick= start_search_or_continue,
         text=Text(
-            'circle', 
+            'search', 
             screen, 
             materialIcons, 
             reposition_img(16.5, 0.5),
@@ -256,7 +245,7 @@ def _main():
                 next(gen)
             except:
                 PLAYING.to_false()
-                traversal = None
+                traversal = []
                 gen = None
                 maze_state = MazeState.GENERATED
         else:
@@ -270,7 +259,7 @@ def _main():
                     next(gen)
                 except:
                     PLAYING.to_false()
-                    traversal = None
+                    traversal = []
                     gen = None
             maze_state = MazeState.GENERATED
         elif maze_state ==  MazeState.SOLVING:
@@ -310,7 +299,60 @@ def _main():
         BLACK, 
         onSubmit=onFPSChange
     )
+    def prompt_file_path():
+        from tkinter import filedialog, messagebox
+        filepath = filedialog.asksaveasfilename(defaultextension="json", filetypes=[("JSON", "*.json")], title="Save maze as JSON")
+        if filepath and start_cell and ending_cell:
+            export_file(
+                matrox_to_str_adjency_list(maze), 
+                (start_cell, ending_cell), 
+                filepath 
+            )
+            messagebox.showinfo("Success", "Maze saved successfully")
+    def load_file_path():
+        from tkinter import filedialog, messagebox
+        filepath = filedialog.askopenfilename(filetypes=[("JSON", "*.json")], title="Load maze from JSON")
+        if not filepath:
+            return
+        try:
+            maze_details = import_maze_details(filepath)
+            nonlocal maze, start_cell, ending_cell
+            maze = as_matrix(maze_details["graph"])
+            start_cell = maze_details["start"]
+            ending_cell = maze_details["end"]
+        except:
+            messagebox.showerror("Error", "Failed to load maze. Invalid data")
+            return
+        solve_maze()
+        # The following lines are a workaround to make the search algos radio buttons show after loading a file
+        # TODO: Fix this workaround
+        nonlocal maze_state
+        maze_state = MazeState.GENERATED
+        _skip()
 
+    LOAD_BUTTON = Button(
+        onclick= load_file_path,
+        text=Text(
+            'upload',
+            screen,
+            materialIcons,
+            reposition_img(16.5, 6.5),
+            WHITE,
+            BLACK,
+        ),
+    )
+    SAVE_BUTTON = Button(
+        onclick= prompt_file_path,
+        text=Text(
+            'download',
+            screen,
+            materialIcons,
+            reposition_img(16.5, 7.5),
+            WHITE,
+            BLACK,
+        ),
+    )
+  
     paths = {
         'northOOB': load_image("assets/paths/northOOB.png", SIZE,SIZE), #0
         'southOOB': load_image("assets/paths/southOOB.png", SIZE,SIZE), #1
@@ -394,11 +436,13 @@ def _main():
                 if PLAYING:
                     PAUSE_BUTTON.listen(event)
                 else: 
-                    PLAY_BUTTON_SOLVE.listen(event)
+                    SEARCH_BUTTON.listen(event)
             RESTART_BUTTON.listen(event)
             FAST_FORWARD.listen(event)
             FPS_FIELD.listen(event)
-            
+            LOAD_BUTTON.listen(event)
+            SAVE_BUTTON.listen(event)
+
             if event.type == pygame.KEYDOWN:
                 player_movement(int(event.key == pygame.K_d) - int(event.key == pygame.K_a),int(event.key == pygame.K_s) - int(event.key == pygame.K_w))
                 
@@ -467,15 +511,18 @@ def _main():
             if PLAYING:
                 PAUSE_BUTTON.draw()
             else:
-                PLAY_BUTTON_SOLVE.draw()
-
-        for buttons in SOLVER_RADIO_BUTTONS:
-            buttons.draw(screen)
-
-        for buttons in GENERATOR_RADIO_BUTTONS:
-            buttons.draw(screen)
+                SEARCH_BUTTON.draw()
+        if maze_state == MazeState.GENERATING:
+            for buttons in GENERATOR_RADIO_BUTTONS:
+                buttons.draw(screen)
+        if maze_state == MazeState.SOLVED or maze_state == MazeState.GENERATED:
+            for buttons in SOLVER_RADIO_BUTTONS:
+                buttons.draw(screen)
+         
         RESTART_BUTTON.draw()
         FAST_FORWARD.draw()
+        SAVE_BUTTON.draw()
+        LOAD_BUTTON.draw()
         screen.blit(FPS_LABEL, FPS_LABEL_RECT)
         # Draw the player at the starting cell
         if maze_state == MazeState.SOLVING or maze_state == MazeState.SOLVED: # Compare maze state
