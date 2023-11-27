@@ -104,6 +104,9 @@ class GeneratorScreen:
         reposition_img:Callable[[int,int],tuple[int,int]],
         save_button: Button,
         load_button: Button,
+        FPS_FIELD: TextField,
+        FPS_LABEL: pygame.Surface,
+        FPS_LABEL_RECT: pygame.Rect,
     ):
         self.SIZE = SIZE
         self.width = width
@@ -122,6 +125,9 @@ class GeneratorScreen:
         self.generated = False
         self.save_button = save_button
         self.load_button = load_button
+        self.FPS_FIELD = FPS_FIELD
+        self.FPS_LABEL = FPS_LABEL
+        self.FPS_LABEL_RECT = FPS_LABEL_RECT
         self.RADIO_BUTTONS = [
             RadioButton(
                 text = 'Random DFS',
@@ -198,18 +204,7 @@ class GeneratorScreen:
             Colors.BLACK,
         ),
     )
-        self.FPS_LABEL = Fonts.textFont.render('FPS:', True, Colors.WHITE, Colors.BLACK)
-        self.FPS_LABEL_RECT = self.FPS_LABEL.get_rect()
-        self.FPS_LABEL_RECT.center = self.reposition_img(16.5, 3.5) # type: ignore
-        self.FPS_FIELD = TextField(
-            screen, 
-            str(CONFIG['FPS_CAP']), 
-            reposition_img(16.5, 4),  # type: ignore
-            Fonts.textFont, 
-            Colors.WHITE, 
-            Colors.BLACK, 
-            onSubmit=onFPSChange
-        )
+ 
     def end(self):
         self._running = False
     def start(self, _=None):
@@ -321,6 +316,9 @@ class SolverScreen:
         maze: list[list[Cell]],
         save_button: Button,
         load_button: Button,
+        FPS_FIELD: TextField,
+        FPS_LABEL: pygame.Surface,
+        FPS_LABEL_RECT: pygame.Rect,
     ):
         self.SIZE = SIZE
         self.width = width
@@ -425,18 +423,9 @@ class SolverScreen:
         )
         self.player_coord.observers.append(lambda v: self.P_CELL.update(v.__repr__()))
 
-        self.FPS_LABEL = Fonts.textFont.render('FPS:', True, Colors.WHITE, Colors.BLACK)
-        self.FPS_LABEL_RECT = self.FPS_LABEL.get_rect()
-        self.FPS_LABEL_RECT.center = self.reposition_img(16.5, 3.5) # type: ignore
-        self.FPS_FIELD = TextField(
-            screen, 
-            str(CONFIG['FPS_CAP']), 
-            self.reposition_img(16.5, 4),  # type: ignore
-            Fonts.textFont, 
-            Colors.WHITE, 
-            Colors.BLACK, 
-            onSubmit=onFPSChange
-        )
+        self.FPS_FIELD = FPS_FIELD
+        self.FPS_LABEL =  FPS_LABEL
+        self.FPS_LABEL_RECT = FPS_LABEL_RECT
     def end(self):
         self._running = False
     def skip(self):
@@ -645,6 +634,19 @@ def main():
     # CURRYING MOMENTS
     reposition_img = tile_position(SIZE)
 
+    FPS_LABEL = Fonts.textFont.render('FPS:', True, Colors.WHITE, Colors.BLACK)
+    FPS_LABEL_RECT = FPS_LABEL.get_rect()
+    FPS_LABEL_RECT.center = reposition_img(16.5, 3.5) # type: ignore
+    FPS_FIELD = TextField(
+        screen, 
+        str(CONFIG['FPS_CAP']), 
+        reposition_img(16.5, 4),  # type: ignore
+        Fonts.textFont, 
+        Colors.WHITE, 
+        Colors.BLACK, 
+        onSubmit=onFPSChange
+    )
+    
     def prompt_file_path():
         from tkinter import filedialog, messagebox
         filepath = filedialog.asksaveasfilename(defaultextension="json", filetypes=[("JSON", "*.json")], title="Save maze as JSON")
@@ -711,6 +713,9 @@ def main():
         reposition_img, 
         SAVE_BUTTON,
         LOAD_BUTTON,
+        FPS_FIELD,
+        FPS_LABEL,
+        FPS_LABEL_RECT,
     )
     GENERATOR_SCREEN.start()
     SOLVER_SCREEN = SolverScreen(
@@ -721,6 +726,9 @@ def main():
         GENERATOR_SCREEN.maze,      
         SAVE_BUTTON,
         LOAD_BUTTON,
+        FPS_FIELD,
+        FPS_LABEL,
+        FPS_LABEL_RECT,
     )
 
     # Start the game loop 
