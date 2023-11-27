@@ -1,6 +1,8 @@
 from typing import Callable
 import pygame
 from Cell import Cell
+from Direction import Direction
+from State import State
 from breadth_first_search import breadth_first_search
 from prim import prim
 from widgets import BoolVal, Button, Button, Text, TextField, RadioButton, Val
@@ -20,7 +22,7 @@ def load_image(path:str, width:int, length:int, ):
         pygame.Surface: The scaled image.
     """
     return pygame.transform.scale(pygame.image.load(path), (width, length))
-def animator(basename: str, file_extension: str, frame_count: int, size, loop=True):
+def animator(basename: str, file_extension: str, frame_count: int, size):
     """
     Generates frames for animation based on the given parameters.
 
@@ -39,14 +41,10 @@ def animator(basename: str, file_extension: str, frame_count: int, size, loop=Tr
         load_image(f"{basename}_{i}.{file_extension}", size,size) for i in range(frame_count)
     ])
     index = 0
-    if loop:
-        while True:
-            yield frames[index]
-            index = (index + 1) % len(frames)
-    else:
-        while index < len(frames):
-            yield frames[index]
-            index += 1
+    while True:
+        yield frames[index]
+        index = (index + 1) % len(frames)
+
 def tile_position(SIZE:int):
     def reposition(x:int|float,y:int|float,x_pad=0,y_pad=0):
         X_START:int = (x*SIZE) + x_pad # type: ignore
@@ -196,7 +194,7 @@ class GeneratorScreen:
         self.RESTART_BUTTON = Button(
         onclick= self.start,
         text=Text(
-            'replay',
+            'delete',
             screen,
             Fonts.materialIcons,
             reposition_img(16.5, 1.5), # type: ignore
@@ -326,6 +324,7 @@ class SolverScreen:
         self.length = length
         self.screen = screen
         self.paths = paths
+        self.path = []
         self.reposition_img = tile_position(SIZE)
         self.MAZE:list[list[Cell]] = maze
         self.traversal_order = []
@@ -338,6 +337,7 @@ class SolverScreen:
         self.index = 0
         self.PLAYER = animator("assets/player/playeridle", "gif", 6, (SIZE-30))
         self.GOAL = animator("assets/goal/goal", "gif", 4, (SIZE-45))
+    
         self.PLAYER_X_PAD = 14
         self.PLAYER_Y_PAD = 3
         self.GOAL_X_PAD = 23
@@ -428,19 +428,78 @@ class SolverScreen:
         self.FPS_LABEL_RECT = FPS_LABEL_RECT
 
         # Setup the trail
-        self.trail_image = load_image("assets/footPath/left.png", (SIZE-40), (SIZE-40))
-        self.visited_coords = []
-        self.player_coord.observers.append(lambda c: self.visited_coords.append((c[0], c[1])))
+        self.trail_sprites = {
+            Direction.WEST: load_image("assets/footPath/W.png", (SIZE-40), (SIZE-40)),
+            Direction.EAST: load_image("assets/footPath/E.png", (SIZE-40), (SIZE-40)),
+            Direction.NORTH: load_image("assets/footPath/N.png", (SIZE-40), (SIZE-40)),
+            Direction.SOUTH: load_image("assets/footPath/S.png", (SIZE-40), (SIZE-40)),
+        }
+        self.visited_coords: list[tuple[int,int, Direction]] = []
+        self.player_coord.observers.append(self.add_visited_coords)
+        self.directions:list[tuple[int,int, Direction]] = []
+        self.highlighted_path_sprites = {
+            Direction.WEST: load_image("assets/footPathHiglight/W.png", (SIZE-40), (SIZE-40)),
+            Direction.EAST: load_image("assets/footPathHiglight/E.png", (SIZE-40), (SIZE-40)),
+            Direction.NORTH: load_image("assets/footPathHiglight/N.png", (SIZE-40), (SIZE-40)),
+            Direction.SOUTH: load_image("assets/footPathHiglight/S.png", (SIZE-40), (SIZE-40)),
+        }
+        self.solved = False
+        self.flag_sprite = animator("assets/flag/flag", "png", 7, (SIZE-45))
 
-
+    def determine_direction(self, to:tuple[int,int], cur:tuple[int,int, Direction|None] = (0,0, None) ):
+        dx = to[0] - cur[0]
+        dy = to[1] - cur[1]
+        # limit dx,dy to 0,1 or -1
+        # (5,1) => (7,1) NORTH
+        if to[0] > cur[0]:
+            dx = 1
+        elif to[0] < cur[0]:
+            dx = -1
+        else:
+            dx = 0
+        if to[1] > cur[1]:
+            dy = 1
+        elif to[1] < cur[1]:
+            dy = -1
+        if abs(dx) == abs(dy):
+            return None
+        return Direction((dx,dy))
+    def calc_direction(self, to:tuple[int,int], basis: list[tuple[int,int]]):
+        # Check the maze for t
+        for coord in basis:
+            cell = self.MAZE[coord[1]][coord[0]]
+            target = self.MAZE[to[1]][to[0]]
+            dx = target.coordinate[0] - cell.coordinate[0] 
+            dy = target.coordinate[1] - cell.coordinate[1] 
+            if abs(dx) == abs(dy) or abs(dx) > 1 or abs(dy) > 1:
+                continue
+            dir = Direction((dx,dy))
+            if cell.walls[dir] == State.VISITED:
+                return dir
+        return None
+    def add_visited_coords(self,c:tuple[int,int]):
+        d = self.calc_direction(
+            to=c, 
+            basis=self.traversal_order
+        )
+        if d == None:
+            return
+        self.visited_coords.append((*c, d))
     def end(self):
         self._running = False
+        self.solved = False
     def skip(self):
         self.PLAYING.to_false()
         self.index = 0
-        self.visited_coords = self.traversal_order
+        visited_coords = [
+            (*c,self.calc_direction(
+            to=c, 
+            basis=self.traversal_order)
+        ) for c in self.traversal_order]
+        self.visited_coords = [c for c in visited_coords if c[2] != None] # type: ignore
         self.traversal_order = []
         self.player_coord.set((self.ending_cell.coordinate))
+        self.solved = True
     def player_movement(self,x_increase, y_increase):
         player_walls = [str(d) for d in self.MAZE[self.player_coord.value[1]][self.player_coord.value[0]].visited_walls()]
         if x_increase == -1 and 'W' in player_walls:
@@ -461,22 +520,28 @@ class SolverScreen:
 
     def start(self, _=None):
         print("solving")
+        self.solved = False
         self.player_coord.set(self.start_cell.coordinate)
         self.index = 0
         self.visited_coords = []
         if CONFIG["SOLVER"].value == "depth_first_search":
             self.path, self.traversal_order = depth_first_search(self.MAZE, self.start_cell, self.ending_cell)
+
         elif CONFIG["SOLVER"].value == "a_star": 
-            self.path, _traversal_order = a_star_search({
+            path, _traversal_order = a_star_search({
             "start": self.start_cell,
             "end": self.ending_cell,
             "graph": matrix_to_edgelist(self.MAZE),
-            }) or []
+            })
+            self.path = [] if path == None else [cell.coordinate for cell in path]
             self.traversal_order = [cell.coordinate for cell in _traversal_order]
         elif CONFIG["SOLVER"].value == "breadth_first_search": 
-            self.path, self.traversal_order = breadth_first_search(matrix_to_edgelist(self.MAZE), self.start_cell, self.ending_cell)
+            path, self.traversal_order = breadth_first_search(matrix_to_edgelist(self.MAZE), self.start_cell, self.ending_cell)
+            self.path = [] if path == None else [cell.coordinate for cell in path]
         else:
             raise ValueError(f"Unknown algorithm: {CONFIG['SOLVER']}")
+        self.directions = [(*self.path[i],self.calc_direction(self.path[i], self.path)) for i in range(1, len(self.path))] # type: ignore
+    
     def loop(self):
         while self._running:
             for event in pygame.event.get():
@@ -529,12 +594,24 @@ class SolverScreen:
             for button in self.RADIO_BUTTONS:
                 button.draw(self.screen)
 
+            # Draw the trail:
+            for x,y, dir in self.visited_coords:
+                trail_coord = self.reposition_img(x,y, self.PLAYER_X_PAD+8, (self.PLAYER_Y_PAD + 15))
+                self.screen.blit(self.trail_sprites[dir], trail_coord) 
+            # Draw the highlighted path
+            if self.solved:
+                for x,y,dir in self.directions:
+                    self.screen.blit(self.highlighted_path_sprites[dir], self.reposition_img(x, y, self.PLAYER_X_PAD+8, (self.PLAYER_Y_PAD + 15)))
+
+            #Draw the flag
+            self.screen.blit(next(self.flag_sprite), self.reposition_img(self.start_cell.X, self.start_cell.Y, self.GOAL_X_PAD, self.GOAL_Y_PAD))
+            
             # Draw the player
             xx,yy = self.reposition_img(self.player_coord.value[0], self.player_coord.value[1], self.PLAYER_X_PAD,self. PLAYER_Y_PAD)
             self.screen.blit(next(self.PLAYER), (xx,yy))
-            # Draw a red outline around the tile the player is in
             outline_x,outline_y = self.reposition_img(self.player_coord.value[0], self.player_coord.value[1])
             pygame.draw.rect(self.screen, (255,0,0),(outline_x,outline_y,self.SIZE,self.SIZE ), 6)
+            # Draw a red outline around the tile the player is in
             # Draw the goal
             self.screen.blit(
                 next(self.GOAL), 
@@ -545,10 +622,7 @@ class SolverScreen:
                     self.GOAL_Y_PAD
                 )
             )
-            # Draw the trail:
-            for cell_coord in self.visited_coords:
-                trail_x, trail_y = self.reposition_img(cell_coord[0], cell_coord[1], self.PLAYER_X_PAD, (self.PLAYER_Y_PAD + 15))
-                self.screen.blit(self.trail_image, (trail_x, trail_y)) 
+
             # Update the display
             pygame.display.flip()
             # limit FPS
@@ -566,6 +640,7 @@ class SolverScreen:
             self.index = 0
             self.traversal_order = []
             self.player_coord.set(self.ending_cell.coordinate)
+            self.solved = True
 
     def start_or_continue(self):
         self.PLAYING.to_true()
@@ -649,7 +724,6 @@ def main():
         'INTERSECTION': load_image("assets/paths/INTERSECTION.png", SIZE,SIZE), #14
         'unsectioned': load_image("assets/paths/unsectioned.png", SIZE,SIZE) #15   
     }
-    # CURRYING MOMENTS
     reposition_img = tile_position(SIZE)
 
     FPS_LABEL = Fonts.textFont.render('FPS:', True, Colors.WHITE, Colors.BLACK)

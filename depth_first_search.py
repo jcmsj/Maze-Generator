@@ -22,7 +22,7 @@ def depth_first_search(maze: list[list[Cell]], start:Cell, end:Cell):
                 next_cell = maze[current.Y + neighbor.value[1]][current.X + neighbor.value[0]]
                 stack.append((next_cell, path + [(next_cell.X, next_cell.Y)]))
 
-    return None, traversal_order
+    return [], traversal_order
 
 def print_path(path):
     if path:
