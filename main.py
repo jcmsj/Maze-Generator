@@ -1,5 +1,5 @@
+from typing import Callable
 import pygame
-from State import MazeState
 from Cell import Cell
 from breadth_first_search import breadth_first_search
 from prim import prim
@@ -54,6 +54,567 @@ def tile_position(SIZE:int):
         return (X_START, Y_START)
     return reposition
 
+class Colors:
+    BLACK = (0, 0, 0)
+    WHITE = (255, 255, 255)
+
+class Fonts:
+    materialIcons:pygame.font.Font = None # type: ignore
+    textFont: pygame.font.Font = None # type: ignore
+
+    @classmethod
+    def init(cls):
+        pygame.font.init()
+        cls.materialIcons = pygame.font.Font('assets/MaterialIconsOutlined-Regular.otf', 64)
+        cls.textFont = pygame.font.Font("assets/pixel.ttf", 24)
+CONFIG = {
+    "FPS_CAP": 30,
+    "GENERATOR": Val("random_dfs"),
+    "ALGOS": ["random_dfs", "prim"],
+    "SOLVER": Val("depth_first_search"),
+    "SOLVER_ALGOS": ["breadth_first_search", "depth_first_search", "a_star" ]
+}
+def onFPSChange(val:str):
+    if val.isdigit():
+        CONFIG["FPS_CAP"] = int(val)
+        print(f"FPS_CAP: {CONFIG['FPS_CAP']}")
+        return False
+    return True
+
+def curried_select(config_key:str, ):
+    def set_group(radiobuttons:list[RadioButton]):
+        def set_choice(choice):
+            def execute():
+                CONFIG[config_key].set(choice)
+                print(CONFIG[config_key].value)
+                for btn in radiobuttons:
+                    btn.checked = btn.assigned == choice
+            return execute
+        return set_choice
+    return set_group
+
+class GeneratorScreen:
+    def __init__(
+        self, 
+        SIZE:int, 
+        width:int, 
+        length:int, 
+        screen:pygame.Surface, 
+        paths:dict[str,pygame.Surface], 
+        reposition_img:Callable[[int,int],tuple[int,int]],
+        save_button: Button,
+        load_button: Button,
+    ):
+        self.SIZE = SIZE
+        self.width = width
+        self.length = length
+        self.screen = screen
+        self.paths = paths
+        self.reposition_img = reposition_img
+        self.maze:list[list[Cell]] = []
+        self.traversal_order = []
+        self.gen = None
+        self.start_cell:Cell = None # type: ignore
+        self.ending_cell:Cell = None # type: ignore
+        self.PLAYING = BoolVal(False)
+        self._running = True
+        self.BUILDING_SPRITE = animator("assets/building/Building", "gif", 3, (SIZE))
+        self.generated = False
+        self.save_button = save_button
+        self.load_button = load_button
+        self.RADIO_BUTTONS = [
+            RadioButton(
+                text = 'Random DFS',
+                assigned = "random_dfs",
+                x = 150,
+                y = 615,
+                checked=True
+            ),
+            RadioButton(
+                text = 'Prim',
+                assigned = 'prim',
+                x = 400,
+                y = 615,
+            ),
+        ]
+
+        self.set_algo = curried_select("GENERATOR")(self.RADIO_BUTTONS)
+        for button in self.RADIO_BUTTONS:
+            button.onclick = self.set_algo(button.assigned)
+        CONFIG["GENERATOR"].observers.append(self.start)
+        self.PLAY_BUTTON = Button(
+            onclick= self.PLAYING.to_true,
+            text=Text(
+                'construction', 
+                self.screen, 
+                Fonts.materialIcons, 
+                self.reposition_img(16.5, 0.5), # type: ignore
+                Colors.WHITE,
+                Colors.BLACK,
+            )
+        )
+
+        self.PAUSE_BUTTON = Button(
+            onclick= self.PLAYING.to_false,
+            text=Text(
+                'pause',
+                self.screen,
+                Fonts.materialIcons,
+                self.reposition_img(16.5, 0.5), # type: ignore
+                Colors.WHITE,
+                Colors.BLACK,
+            ),
+        )
+        self.SEARCH_BUTTON = Button(
+            onclick= self.end,
+            text=Text(
+                'search', 
+                self.screen, 
+                Fonts.materialIcons, 
+                self.reposition_img(16.5, 0.5), # type: ignore
+                Colors.WHITE,
+                Colors.BLACK,
+            ),
+        )
+        self.SKIP_BUTTON = Button(
+            onclick= self.skip,
+            text=Text(
+                'fast_forward',
+                self.screen,
+                Fonts.materialIcons,
+                self.reposition_img(16.5,2.5), # type: ignore
+                Colors.WHITE,
+                Colors.BLACK,
+            ),
+        )
+        self.RESTART_BUTTON = Button(
+        onclick= self.start,
+        text=Text(
+            'replay',
+            screen,
+            Fonts.materialIcons,
+            reposition_img(16.5, 1.5), # type: ignore
+            Colors.WHITE, 
+            Colors.BLACK,
+        ),
+    )
+        self.FPS_LABEL = Fonts.textFont.render('FPS:', True, Colors.WHITE, Colors.BLACK)
+        self.FPS_LABEL_RECT = self.FPS_LABEL.get_rect()
+        self.FPS_LABEL_RECT.center = self.reposition_img(16.5, 3.5) # type: ignore
+        self.FPS_FIELD = TextField(
+            screen, 
+            str(CONFIG['FPS_CAP']), 
+            reposition_img(16.5, 4),  # type: ignore
+            Fonts.textFont, 
+            Colors.WHITE, 
+            Colors.BLACK, 
+            onSubmit=onFPSChange
+        )
+    def end(self):
+        self._running = False
+    def start(self, _=None):
+        self._running = True
+        self.generated = False
+        if CONFIG["GENERATOR"].value == "random_dfs":
+            self.start_cell, self.ending_cell, self.gen,self.maze,self.traversal = random_dfs(length=self.length,width=self.width)
+
+        elif CONFIG["GENERATOR"].value == "prim":
+            self.maze = make_initial_maze(length=self.length,width=self.width)
+            self.start_cell, self.ending_cell, self.gen,self.maze,self.traversal = prim(self.maze)
+            
+        self.PLAYING.to_false()
+    def skip(self):
+        while self.gen != None:
+            try:
+                next(self.gen)
+            except:
+                self.PLAYING.to_false()
+                self.traversal = []
+                self.gen = None
+                self.generated = True
+
+    def loop(self):
+        while self._running:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    pygame.quit()
+
+                if self.PLAYING:
+                    self.PAUSE_BUTTON.listen(event)
+                elif self.generated:
+                    self.SEARCH_BUTTON.listen(event)
+                else:
+                    self.PLAY_BUTTON.listen(event)
+                self.SKIP_BUTTON.listen(event)
+                self.RESTART_BUTTON.listen(event)
+                self.FPS_FIELD.listen(event)
+                for button in self.RADIO_BUTTONS:
+                    button.listen(event)
+                self.save_button.listen(event)
+                self.load_button.listen(event)
+            # Draw the game screen
+            self.screen.fill((0, 0, 0))
+            # Draw the maze
+            render_maze(
+                self.maze, 
+                self.width, 
+                self.length, 
+                self.screen, 
+                self.paths, 
+                self.reposition_img, 
+                self.render_builder_sprite
+            )
+            # show the UI for generating
+            if self.PLAYING:
+                self.PAUSE_BUTTON.draw()
+            elif self.generated:
+                self.SEARCH_BUTTON.draw()
+            else:
+                self.PLAY_BUTTON.draw()
+            self.SKIP_BUTTON.draw()
+            self.RESTART_BUTTON.draw()
+            self.screen.blit(self.FPS_LABEL, self.FPS_LABEL_RECT)
+            self.FPS_FIELD.draw()
+            self.save_button.draw()
+            self.load_button.draw()
+            # Paint the radio buttosn
+            for button in self.RADIO_BUTTONS:
+                button.draw(self.screen)
+            # Update the display
+            pygame.display.flip()
+            # limit FPS
+            pygame.time.Clock().tick(CONFIG['FPS_CAP'])
+
+            if self.PLAYING:
+                self.step()
+    def step(self):
+        """Returns if the generator is done"""
+        if self.gen != None:
+            try:
+                next(self.gen)
+            except:
+                self.PLAYING.to_false()
+                self.traversal = []
+                self.gen = None
+                self.generated = True
+        else:
+            self.generated = True
+
+
+    def render_builder_sprite(
+            self, 
+            cell:Cell, 
+            position: tuple[int,int]
+        ):
+        if self.traversal and cell == self.traversal[-1]:
+            # draw the building sprite
+            self.screen.blit(next(self.BUILDING_SPRITE),position)
+
+class SolverScreen:
+    def __init__(
+        self, 
+        SIZE:int, 
+        width:int, 
+        length:int, 
+        screen:pygame.Surface, 
+        paths:dict[str,pygame.Surface], 
+        maze: list[list[Cell]],
+        save_button: Button,
+        load_button: Button,
+    ):
+        self.SIZE = SIZE
+        self.width = width
+        self.length = length
+        self.screen = screen
+        self.paths = paths
+        self.reposition_img = tile_position(SIZE)
+        self.MAZE:list[list[Cell]] = maze
+        self.traversal = []
+        self.start_cell:Cell = None # type: ignore
+        self.ending_cell:Cell = None # type: ignore
+        self.PLAYING = BoolVal(False)
+        self.save_button = save_button
+        self.load_button = load_button
+        self._running = True
+        self.index = 0
+        self.PLAYER = animator("assets/player/playeridle", "gif", 6, (SIZE-30))
+        self.GOAL = animator("assets/goal/goal", "gif", 4, (SIZE-45))
+        self.PLAYER_X_PAD = 14
+        self.PLAYER_Y_PAD = 3
+        self.GOAL_X_PAD = 23
+        self.player_coord:Val[tuple[int,int]]= Val((-1,-1))
+        self.GOAL_Y_PAD = 8
+        self.RADIO_BUTTONS = [
+            RadioButton(
+                assigned = "a_star",
+                text = 'A*',
+                x = 150,
+                y = 615,
+            ),
+            RadioButton(
+                assigned = 'breadth_first_search',
+                text = 'BFS',
+                x = 400,
+                y = 615,
+            ),
+            RadioButton(
+                assigned = 'depth_first_search',
+                text = 'DFS',
+                x = 650,
+                y = 615,
+                checked = True
+            )
+        ]
+
+        self.set_algo = curried_select("SOLVER")(self.RADIO_BUTTONS)
+        for button in self.RADIO_BUTTONS:
+            button.onclick = self.set_algo(button.assigned)
+        CONFIG["SOLVER"].observers.append(self.start)
+        self.PAUSE_BUTTON = Button(
+            onclick= self.PLAYING.to_false,
+            text=Text(
+                'pause',
+                self.screen,
+                Fonts.materialIcons,
+                self.reposition_img(16.5, 0.5), # type: ignore
+                Colors.WHITE,
+                Colors.BLACK,
+            ),
+        )
+        self.SEARCH_BUTTON = Button(
+            onclick= self.start_or_continue,
+            text=Text(
+                'search', 
+                self.screen, 
+                Fonts.materialIcons, 
+                self.reposition_img(16.5, 0.5), # type: ignore
+                Colors.WHITE,
+                Colors.BLACK,
+            ),
+        )
+        self.SKIP_BUTTON = Button(
+            onclick= self.skip,
+            text=Text(
+                'fast_forward',
+                self.screen,
+                Fonts.materialIcons,
+                self.reposition_img(16.5,2.5), # type: ignore
+                Colors.WHITE,
+                Colors.BLACK,
+            ),
+        )
+        self.RESTART_BUTTON = Button(
+        onclick= self.end,
+            text=Text(
+                'replay',
+                screen,
+                Fonts.materialIcons,
+                self.reposition_img(16.5, 1.5), # type: ignore
+                Colors.WHITE, 
+                Colors.BLACK,
+            ),
+        )
+
+        self.P_CELL = TextField(
+            screen, 
+            self.player_coord.value.__repr__(), 
+            self.reposition_img(16.5,5), 
+            Fonts.textFont, 
+            Colors.WHITE, 
+            Colors.BLACK, 
+        )
+        self.player_coord.observers.append(lambda v: self.P_CELL.update(v.__repr__()))
+
+        self.FPS_LABEL = Fonts.textFont.render('FPS:', True, Colors.WHITE, Colors.BLACK)
+        self.FPS_LABEL_RECT = self.FPS_LABEL.get_rect()
+        self.FPS_LABEL_RECT.center = self.reposition_img(16.5, 3.5) # type: ignore
+        self.FPS_FIELD = TextField(
+            screen, 
+            str(CONFIG['FPS_CAP']), 
+            self.reposition_img(16.5, 4),  # type: ignore
+            Fonts.textFont, 
+            Colors.WHITE, 
+            Colors.BLACK, 
+            onSubmit=onFPSChange
+        )
+    def end(self):
+        self._running = False
+    def skip(self):
+        self.PLAYING.to_false()
+        self.index = 0
+        self.traversal_order = []
+        self.player_coord.set((self.ending_cell.coordinate))
+    def player_movement(self,x_increase, y_increase):
+        player_walls = [str(d) for d in self.MAZE[self.player_coord.value[1]][self.player_coord.value[0]].visited_walls()]
+        if x_increase == -1 and 'W' in player_walls:
+            self.player_coord.set((self.player_coord.value[0] + x_increase, self.player_coord.value[1]))
+        elif x_increase == 1 and 'E' in player_walls:
+            self.player_coord.set((self.player_coord.value[0] + x_increase, self.player_coord.value[1]))
+        if y_increase == -1 and 'N' in player_walls:
+            self.player_coord.set((self.player_coord.value[0], self.player_coord.value[1] + y_increase))
+        elif y_increase == 1 and 'S' in player_walls:
+            self.player_coord.set((self.player_coord.value[0], self.player_coord.value[1] + y_increase))
+    def set_search_space(self, maze:list[list[Cell]], start_cell:Cell, ending_cell:Cell):
+        self.MAZE = maze
+        self.start_cell = start_cell
+        self.ending_cell = ending_cell
+        self.player_coord.set(self.start_cell.coordinate)
+
+
+    def start(self, _=None):
+        print("solving")
+        self.player_coord.set(self.start_cell.coordinate)
+        self.index = 0
+        if CONFIG["SOLVER"].value == "depth_first_search":
+            self.path, self.traversal_order = depth_first_search(self.MAZE, self.start_cell, self.ending_cell)
+        elif CONFIG["SOLVER"].value == "a_star": 
+            self.path, _traversal_order = a_star_search({
+            "start": self.start_cell,
+            "end": self.ending_cell,
+            "graph": matrix_to_edgelist(self.MAZE),
+            }) or []
+            self.traversal_order = [cell.coordinate for cell in _traversal_order]
+        elif CONFIG["SOLVER"].value == "breadth_first_search": 
+            self.path, self.traversal_order = breadth_first_search(matrix_to_edgelist(self.MAZE), self.start_cell, self.ending_cell)
+        else:
+            raise ValueError(f"Unknown algorithm: {CONFIG['SOLVER']}")
+    def loop(self):
+        while self._running:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    pygame.quit()
+
+                if self.PLAYING:
+                    self.PAUSE_BUTTON.listen(event)
+                else:
+                    self.SEARCH_BUTTON.listen(event)
+                self.SKIP_BUTTON.listen(event)
+                self.RESTART_BUTTON.listen(event)
+                self.FPS_FIELD.listen(event)
+                for button in self.RADIO_BUTTONS:
+                    button.listen(event)
+                self.save_button.listen(event)
+                self.load_button.listen(event)
+                if event.type == pygame.KEYDOWN:
+                    self.player_movement(int(event.key == pygame.K_d) - int(event.key == pygame.K_a),int(event.key == pygame.K_s) - int(event.key == pygame.K_w))
+            
+            # Draw the game screen
+            self.screen.fill((0, 0, 0))
+            # Draw the maze
+            render_maze(
+                self.MAZE, 
+                self.width, 
+                self.length, 
+                self.screen, 
+                self.paths, 
+                self.reposition_img, 
+                lambda cell, position: None
+            )
+            # show the UI for generating
+            if self.PLAYING:
+                self.PAUSE_BUTTON.draw()
+            else:
+                self.SEARCH_BUTTON.draw()
+            self.SKIP_BUTTON.draw()
+            self.RESTART_BUTTON.draw()
+            self.screen.blit(self.FPS_LABEL, self.FPS_LABEL_RECT)
+            self.FPS_FIELD.draw()
+            self.save_button.draw()
+            self.load_button.draw()
+            self.P_CELL.draw()
+            # Paint the radio buttosn
+            for button in self.RADIO_BUTTONS:
+                button.draw(self.screen)
+
+            # Draw the player
+            xx,yy = self.reposition_img(self.player_coord.value[0], self.player_coord.value[1], self.PLAYER_X_PAD,self. PLAYER_Y_PAD)
+            self.screen.blit(next(self.PLAYER), (xx,yy))
+            # Draw a red outline around the tile the player is in
+            outline_x,outline_y = self.reposition_img(self.player_coord.value[0], self.player_coord.value[1])
+            pygame.draw.rect(self.screen, (255,0,0),(outline_x,outline_y,self.SIZE,self.SIZE ), 6)
+            # Draw the goal
+            self.screen.blit(
+                next(self.GOAL), 
+                self.reposition_img(
+                    self.ending_cell.X, 
+                    self.ending_cell.Y, 
+                    self.GOAL_X_PAD,
+                    self.GOAL_Y_PAD
+                )
+            )
+            # Update the display
+            pygame.display.flip()
+            # limit FPS
+            pygame.time.Clock().tick(CONFIG['FPS_CAP'])
+
+            if self.PLAYING:
+                self.step()
+    def step(self):
+        """Returns if the generator is done"""
+        if self.traversal_order and self.index < len(self.traversal_order):
+            self.player_coord.set(self.traversal_order[self.index])
+            self.index += 1
+        else:
+            self.PLAYING.to_false()
+            self.index = 0
+            self.traversal_order = []
+            self.player_coord.set(self.ending_cell.coordinate)
+
+    def start_or_continue(self):
+        self.PLAYING.to_true()
+        if self.index == 0:
+            self.start()
+ 
+def render_maze(
+    maze:list[list[Cell]], 
+    width:int, length:int, 
+    screen:pygame.Surface, 
+    paths:dict[str,pygame.Surface],
+    reposition_img:Callable[[int,int],tuple[int,int]],
+    overlay: Callable[[Cell, tuple[int,int]], None]
+):
+    for y in range(length):
+        for x in range(width):
+            cell = maze[y][x]
+            position = reposition_img(x,y)
+            direction_list = [str(d) for d in cell.visited_walls()]
+            direction_str = ''.join(direction_list)
+            
+            match direction_str:
+                case '':
+                    screen.blit(paths['unsectioned'], position)
+                case 'NS':
+                    screen.blit(paths['VERTICAL'], position)
+                case 'WE':
+                    screen.blit(paths['HORIZONTAL'], position)
+                case 'WNS':
+                    screen.blit(paths['V_west'], position)
+                case 'NES':
+                    screen.blit(paths['V_east'], position)
+                case 'WES':
+                    screen.blit(paths['H_south'], position)
+                case 'WNE':
+                    screen.blit(paths['H_north'], position)
+                case 'WS':
+                    screen.blit(paths['SOUTHWEST'], position)
+                case 'ES':
+                    screen.blit(paths['SOUTHEAST'], position)
+                case 'WN':
+                    screen.blit(paths['NORTHWEST'], position)
+                case 'NE':
+                    screen.blit(paths['NORTHEAST'], position)
+                case 'E':
+                    screen.blit(paths['westOOB'], position)
+                case 'W':
+                    screen.blit(paths['eastOOB'], position)
+                case 'S':
+                    screen.blit(paths['northOOB'], position)
+                case 'N':
+                    screen.blit(paths['southOOB'], position)
+                case _:
+                    screen.blit(paths['INTERSECTION'], position)
+            overlay(cell, position)
+
 def main():
     SIZE = 75
     width = 16 #len(maze[0])
@@ -62,297 +623,7 @@ def main():
     window_tile_height = length + 1
     screen = pygame.display.set_mode((window_tile_width*SIZE, window_tile_height*SIZE))
     pygame.display.set_caption("Yet Another Maze Generator")
-    # load the material icons font
-    pygame.font.init()
-    materialIcons = pygame.font.Font('assets/MaterialIconsOutlined-Regular.otf', 64)
-    textFont = pygame.font.Font("assets/pixel.ttf", 24)
-    BLACK = (0, 0, 0)
-    WHITE = (255, 255, 255)
-    CONFIG = {
-        "FPS_CAP": 30,
-        "GENERATOR": Val("random_dfs"),
-        "ALGOS": ["random_dfs", "prim"],
-        "SOLVER": Val("depth_first_search"),
-        "SOLVER_ALGOS": ["breadth_first_search", "depth_first_search", "a_star" ]
-    }
-
-    # CURRYING MOMENTS
-    reposition_img = tile_position(SIZE)
-    def curried_select(config_key:str, ):
-        def set_group(radiobuttons:list[RadioButton]):
-            def set_choice(choice):
-                def execute():
-                    CONFIG[config_key].set(choice)
-                    print(CONFIG[config_key].value)
-                    for btn in radiobuttons:
-                        btn.checked = btn.assigned == choice
-                return execute
-            return set_choice
-        return set_group
-
-    SOLVER_RADIO_BUTTONS = [
-        RadioButton(
-            assigned = "a_star",
-            text = 'A*',
-            x = 150,
-            y = 615,
-        ),
-        RadioButton(
-            assigned = 'breadth_first_search',
-            text = 'BFS',
-            x = 400,
-            y = 615,
-        ),
-        RadioButton(
-            assigned = 'depth_first_search',
-            text = 'DFS',
-            x = 650,
-            y = 615,
-            checked = True
-        )
-    ]
-
-    GENERATOR_RADIO_BUTTONS = [
-        RadioButton(
-            text = 'Random DFS',
-            assigned = "random_dfs",
-            x = 150,
-            y = 615,
-            checked=True
-        ),
-        RadioButton(
-            text = 'Prim',
-            assigned = 'prim',
-            x = 400,
-            y = 615,
-        ),
-    ]
-
-    set_solver_algo = curried_select("SOLVER")(SOLVER_RADIO_BUTTONS)
-    set_generator_algo = curried_select("GENERATOR")(GENERATOR_RADIO_BUTTONS)
-
-    for button in SOLVER_RADIO_BUTTONS:
-        button.onclick = set_solver_algo(button.assigned)
-
-    for button in GENERATOR_RADIO_BUTTONS:
-        button.onclick = set_generator_algo(button.assigned)
-
-
-    PLAYING = BoolVal(False)
-
-    maze_state = MazeState.GENERATING
-    player_coord = (-1,-1)
-    index = 0
-    gen = None
-    start_cell = None
-    ending_cell = None
-    maze:list[list[Cell]] = []
-    traversal = []
-    traversal_order:list[tuple[int,int]] = []
-    path = []
-    def start(args=None):
-        nonlocal start_cell, ending_cell, maze, gen, traversal, traversal_order, index, player_coord, path, player_x, player_y, maze_state
-        traversal_order = []
-        index = 0
-        
-        if CONFIG["GENERATOR"].value == "random_dfs":
-            start_cell, ending_cell, gen, maze,traversal = random_dfs(length=length,width=width)
-
-        elif CONFIG["GENERATOR"].value == "prim":
-            maze = make_initial_maze(length=length,width=width)
-            start_cell, ending_cell, gen, maze,traversal = prim(maze)
-            
-        player_x = start_cell.X
-        player_y = start_cell.Y
-        maze_state = MazeState.GENERATING
-        PLAYING.to_false()
-    CONFIG["GENERATOR"].observers.append(start)
-    PLAY_BUTTON = Button(
-        onclick= PLAYING.to_true,
-        text=Text(
-            'construction', 
-            screen, 
-            materialIcons, 
-            reposition_img(16.5, 0.5),
-            WHITE,
-            BLACK,
-        )
-    )
-
-    PAUSE_BUTTON = Button(
-        onclick= PLAYING.to_false,
-        text=Text(
-            'pause',
-            screen,
-            materialIcons,
-            reposition_img(16.5, 0.5),
-            WHITE,
-            BLACK,
-        ),
-    )
-    def solve_maze():
-        nonlocal path, traversal_order, index, maze, start_cell, ending_cell, player_coord, maze_state
-        print("solving")
-        maze_state = MazeState.SOLVING
-        player_coord = start_cell.coordinate
-        index = 0
-        if CONFIG["SOLVER"].value == "depth_first_search":
-            path, traversal_order = depth_first_search(maze, start_cell, ending_cell)
-        elif CONFIG["SOLVER"].value == "a_star": 
-            path, _traversal_order = a_star_search({
-            "start": start_cell,
-            "end": ending_cell,
-            "graph": matrix_to_edgelist(maze),
-            }) or []
-            traversal_order = [cell.coordinate for cell in _traversal_order]
-        elif CONFIG["SOLVER"].value == "breadth_first_search": 
-            path, traversal_order = breadth_first_search(matrix_to_edgelist(maze), start_cell, ending_cell)
-        else:
-            raise ValueError(f"Unknown algorithm: {CONFIG['SOLVER']}")
-    def _solver():
-        nonlocal player_coord, index, maze_state, traversal_order
-        if traversal_order and index < len(traversal_order):
-            player_coord = traversal_order[index]
-            index += 1
-        else:
-            maze_state = MazeState.SOLVED
-            PLAYING.to_false()
-            index = 0
-            traversal_order = []
-            # player_coord = ending_cell.coordinate
-
-    def start_search_or_continue():
-        nonlocal index, maze_state
-        PLAYING.to_true()
-        if maze_state == MazeState.SOLVED or maze_state == MazeState.GENERATED:
-            solve_maze()
-        
-    SEARCH_BUTTON = Button(
-        onclick= start_search_or_continue,
-        text=Text(
-            'search', 
-            screen, 
-            materialIcons, 
-            reposition_img(16.5, 0.5),
-            WHITE,
-            BLACK,
-        ),
-    )
-    def _step():
-        nonlocal gen, traversal, maze_state
-        if gen != None:
-            try:
-                next(gen)
-            except:
-                PLAYING.to_false()
-                traversal = []
-                gen = None
-                maze_state = MazeState.GENERATED
-        else:
-            maze_state = MazeState.GENERATED
-
-    def _skip():
-        nonlocal gen, traversal, maze_state, traversal_order, player_coord, index
-        if maze_state == MazeState.GENERATING:
-            while gen != None:
-                try:
-                    next(gen)
-                except:
-                    PLAYING.to_false()
-                    traversal = []
-                    gen = None
-            maze_state = MazeState.GENERATED
-        elif maze_state ==  MazeState.SOLVING:
-            PLAYING.to_false()
-            index = 0
-            traversal_order = []
-            player_coord = ending_cell.coordinate
-            maze_state = MazeState.SOLVED
-        
-    FAST_FORWARD = Button(
-        onclick= _skip,
-        text=Text(
-            'fast_forward',
-            screen,
-            materialIcons,
-            reposition_img(16.5,2.5),
-            WHITE,
-            BLACK,
-        ),
-    )
-    def onFPSChange(val:str):
-        if val.isdigit():
-            CONFIG["FPS_CAP"] = int(val)
-            print(f"FPS_CAP: {CONFIG['FPS_CAP']}")
-            return False
-        return True
-    
-    FPS_LABEL = textFont.render('FPS:', True, WHITE, BLACK)
-    FPS_LABEL_RECT = FPS_LABEL.get_rect()
-    FPS_LABEL_RECT.center = reposition_img(16.5, 3.5)
-    FPS_FIELD = TextField(
-        screen, 
-        str(CONFIG['FPS_CAP']), 
-        reposition_img(16.5, 4), 
-        textFont, 
-        WHITE, 
-        BLACK, 
-        onSubmit=onFPSChange
-    )
-    def prompt_file_path():
-        from tkinter import filedialog, messagebox
-        filepath = filedialog.asksaveasfilename(defaultextension="json", filetypes=[("JSON", "*.json")], title="Save maze as JSON")
-        if filepath and start_cell and ending_cell:
-            export_file(
-                matrix_to_str_edgelist(maze), 
-                (start_cell, ending_cell), 
-                filepath 
-            )
-            messagebox.showinfo("Success", "Maze saved successfully")
-    def load_file_path():
-        from tkinter import filedialog, messagebox
-        filepath = filedialog.askopenfilename(filetypes=[("JSON", "*.json")], title="Load maze from JSON")
-        if not filepath:
-            return
-        try:
-            maze_details = import_maze_details(filepath)
-            _maze = as_matrix(maze_details["graph"])
-            # check the dimensions of this maze is the same with the constants. Otherwise show an error for now
-            if len(_maze) != length or len(_maze[0]) != width:
-                messagebox.showerror("Error", f"Failed to load maze!\n Maze dimensions must be {width} by {length}.\n Got {len(_maze[0])} by {len(_maze)} ")
-                return
-            nonlocal maze, start_cell, ending_cell
-            maze = _maze
-            start_cell = maze_details["start"]
-            ending_cell = maze_details["end"]
-        except:
-            messagebox.showerror("Error", "Failed to load maze. Invalid data")
-            return
-        solve_maze()
-
-    LOAD_BUTTON = Button(
-        onclick= load_file_path,
-        text=Text(
-            'upload',
-            screen,
-            materialIcons,
-            reposition_img(16.5, 6.5),
-            WHITE,
-            BLACK,
-        ),
-    )
-    SAVE_BUTTON = Button(
-        onclick= prompt_file_path,
-        text=Text(
-            'download',
-            screen,
-            materialIcons,
-            reposition_img(16.5, 7.5),
-            WHITE,
-            BLACK,
-        ),
-    )
-  
+    Fonts.init()
     paths = {
         'northOOB': load_image("assets/paths/northOOB.png", SIZE,SIZE), #0
         'southOOB': load_image("assets/paths/southOOB.png", SIZE,SIZE), #1
@@ -371,181 +642,99 @@ def main():
         'INTERSECTION': load_image("assets/paths/INTERSECTION.png", SIZE,SIZE), #14
         'unsectioned': load_image("assets/paths/unsectioned.png", SIZE,SIZE) #15   
     }
+    # CURRYING MOMENTS
+    reposition_img = tile_position(SIZE)
 
-    start()
-    player_x:int = start_cell.X or 0
-    
-    player_y:int = start_cell.Y or 0
-    RESTART_BUTTON = Button(
-        onclick= start,
+    def prompt_file_path():
+        from tkinter import filedialog, messagebox
+        filepath = filedialog.asksaveasfilename(defaultextension="json", filetypes=[("JSON", "*.json")], title="Save maze as JSON")
+        if filepath and GENERATOR_SCREEN.start_cell and GENERATOR_SCREEN.ending_cell:
+            export_file(
+                matrix_to_str_edgelist(GENERATOR_SCREEN.maze), 
+                (GENERATOR_SCREEN.start_cell,GENERATOR_SCREEN.ending_cell), 
+                filepath 
+            )
+            messagebox.showinfo("Success", "Maze saved successfully")
+    def load_file_path():
+        from tkinter import filedialog, messagebox
+        filepath = filedialog.askopenfilename(filetypes=[("JSON", "*.json")], title="Load maze from JSON")
+        if not filepath:
+            return
+        try:
+            maze_details = import_maze_details(filepath)
+            maze = as_matrix(maze_details["graph"])
+            # check the dimensions of this maze is the same with the constants. Otherwise show an error for now
+            if len(maze) != length or len(maze[0]) != width:
+                messagebox.showerror("Error", f"Failed to load maze!\n Maze dimensions must be {width} by {length}.\n Got {len(maze[0])} by {len(maze)} ")
+                return
+            GENERATOR_SCREEN.maze = maze
+            GENERATOR_SCREEN.start_cell = maze_details["start"]
+            GENERATOR_SCREEN.ending_cell = maze_details["end"]
+            GENERATOR_SCREEN.end()
+            if SOLVER_SCREEN._running:
+                SOLVER_SCREEN.set_search_space(
+                    GENERATOR_SCREEN.maze,
+                    GENERATOR_SCREEN.start_cell,
+                    GENERATOR_SCREEN.ending_cell
+                )
+        except:
+            messagebox.showerror("Error", "Failed to load maze. Invalid data")
+            return
+
+    LOAD_BUTTON = Button(
+        onclick= load_file_path,
         text=Text(
-            'replay',
+            'upload',
             screen,
-            materialIcons,
-            reposition_img(16.5, 1.5),
-            WHITE, 
-            BLACK,
+            Fonts.materialIcons,
+            reposition_img(16.5, 6.5),
+            Colors.WHITE,
+            Colors.BLACK,
         ),
     )
-    
-    player_cell = maze[player_y][player_x]
-    P_CELL = TextField(
-        screen, 
-        player_cell.__repr__(), 
-        reposition_img(16.5,5), 
-        textFont, 
-        WHITE, 
-        BLACK, 
+    SAVE_BUTTON = Button(
+        onclick= prompt_file_path,
+        text=Text(
+            'download',
+            screen,
+            Fonts.materialIcons,
+            reposition_img(16.5, 7.5),
+            Colors.WHITE,
+            Colors.BLACK,
+        ),
     )
-    def player_movement(x_increase, y_increase):
-        nonlocal player_x, player_y, player_cell, maze
-        player_walls = [str(d) for d in player_cell.visited_walls()]
-        if x_increase == -1 and 'W' in player_walls:
-            player_x += x_increase
-        elif x_increase == 1 and 'E' in player_walls:
-            player_x += x_increase
-        if y_increase == -1 and 'N' in player_walls:
-            player_y += y_increase
-        elif y_increase == 1 and 'S' in player_walls:
-            player_y += y_increase
-        player_cell = maze[player_y][player_x]
-        P_CELL.update(f"({player_x}, {player_y})")
-
-    player = animator("assets/player/playeridle", "gif", 6, (SIZE-30))
-    goal = animator("assets/goal/goal", "gif", 4, (SIZE-45))
-    building = animator("assets/building/Building", "gif", 3, (SIZE))
+    GENERATOR_SCREEN = GeneratorScreen(
+        SIZE, 
+        width, length, 
+        screen, 
+        paths, 
+        reposition_img, 
+        SAVE_BUTTON,
+        LOAD_BUTTON,
+    )
+    GENERATOR_SCREEN.start()
+    SOLVER_SCREEN = SolverScreen(
+        SIZE, 
+        width, length, 
+        screen, 
+        paths, 
+        GENERATOR_SCREEN.maze,      
+        SAVE_BUTTON,
+        LOAD_BUTTON,
+    )
 
     # Start the game loop 
     while True:
-        # Check for events
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                pygame.quit()
-            if maze_state == MazeState.GENERATING:
-                if PLAYING:
-                    PAUSE_BUTTON.listen(event)
-                else: 
-                    for button in GENERATOR_RADIO_BUTTONS:
-                        button.listen(event)
-                    PLAY_BUTTON.listen(event)
-            else:
-                for button in SOLVER_RADIO_BUTTONS:
-                    button.listen(event)
-                
-                if PLAYING:
-                    PAUSE_BUTTON.listen(event)
-                else: 
-                    SEARCH_BUTTON.listen(event)
-            RESTART_BUTTON.listen(event)
-            FAST_FORWARD.listen(event)
-            FPS_FIELD.listen(event)
-            LOAD_BUTTON.listen(event)
-            SAVE_BUTTON.listen(event)
-
-            if event.type == pygame.KEYDOWN:
-                player_movement(int(event.key == pygame.K_d) - int(event.key == pygame.K_a),int(event.key == pygame.K_s) - int(event.key == pygame.K_w))
-                
-            # event.unicode
-            # check what letter
-            
-        # Draw the game screen
-        screen.fill((0, 0, 0))
-        
-        PLAYER_X_PAD = 14
-        PLAYER_Y_PAD = 3
-        GOAL_X_PAD = 23
-        GOAL_Y_PAD = 8
-        for y in range(length):
-            for x in range(width):
-                cell = maze[y][x]
-                position = reposition_img(x,y)
-                direction_list = [str(d) for d in cell.visited_walls()]
-                if len(direction_list) == 0:
-                    screen.blit(paths['unsectioned'], position)
-                elif len(direction_list) == 4:
-                    screen.blit(paths['INTERSECTION'], position)
-                elif direction_list == ['N','S']:
-                    screen.blit(paths['VERTICAL'], position)
-                elif direction_list == ['W','E']:
-                    screen.blit(paths['HORIZONTAL'], position)
-                elif direction_list == ['W','N','S']:
-                    screen.blit(paths['V_west'], position)
-                elif direction_list == ['N','E','S']:
-                    screen.blit(paths['V_east'], position)
-                elif direction_list == ['W','E','S']:
-                    screen.blit(paths['H_south'], position)
-                elif direction_list == ['W','N','E']:
-                    screen.blit(paths['H_north'], position)
-                elif direction_list == ['W','S']:
-                    screen.blit(paths['SOUTHWEST'], position)
-                elif direction_list == ['E','S']:
-                    screen.blit(paths['SOUTHEAST'], position)
-                elif direction_list == ['W','N']:
-                    screen.blit(paths['NORTHWEST'], position)
-                elif direction_list == ['N','E']:
-                    screen.blit(paths['NORTHEAST'], position)
-                elif direction_list == ['E']:
-                    screen.blit(paths['westOOB'], position)
-                elif direction_list == ['W']:
-                    screen.blit(paths['eastOOB'], position)
-                elif direction_list == ['S']:
-                    screen.blit(paths['northOOB'], position)
-                elif direction_list == ['N']:
-                    screen.blit(paths['southOOB'], position)
-                else: 
-                    pass
-                if traversal and cell == traversal[-1]:
-                    # draw the building sprite
-                    screen.blit(next(building),position)
-
-        # For the DFS Solver
-        if maze_state == MazeState.GENERATING:
-            # show the UI for generating
-            if PLAYING:
-                PAUSE_BUTTON.draw()
-            else:
-                PLAY_BUTTON.draw()
-        else:
-            # show the UI for solving
-            if PLAYING:
-                PAUSE_BUTTON.draw()
-            else:
-                SEARCH_BUTTON.draw()
-        if maze_state == MazeState.GENERATING:
-            for buttons in GENERATOR_RADIO_BUTTONS:
-                buttons.draw(screen)
-        else:
-            for buttons in SOLVER_RADIO_BUTTONS:
-                buttons.draw(screen)
-         
-        RESTART_BUTTON.draw()
-        FAST_FORWARD.draw()
-        SAVE_BUTTON.draw()
-        LOAD_BUTTON.draw()
-        screen.blit(FPS_LABEL, FPS_LABEL_RECT)
-        # Draw the player at the starting cell
-        if maze_state == MazeState.SOLVING or maze_state == MazeState.SOLVED: # Compare maze state
-            xx,yy = reposition_img(player_coord[0], player_coord[1], PLAYER_X_PAD, PLAYER_Y_PAD)
-            screen.blit(next(player), (xx,yy))
-            outline_x,outline_y = reposition_img(player_coord[0], player_coord[1])
-            pygame.draw.rect(screen, (255,0,0),(outline_x,outline_y,SIZE,SIZE ), 6)
-        else:
-            screen.blit(next(player), reposition_img(player_x, player_y, PLAYER_X_PAD, PLAYER_Y_PAD))
-        screen.blit(next(goal), reposition_img(ending_cell.X, ending_cell.Y, GOAL_X_PAD, GOAL_Y_PAD))
-        FPS_FIELD.draw()
-        P_CELL.draw()
-        # Update the display
-        pygame.display.flip()
-        # limit FPS
-        pygame.time.Clock().tick(CONFIG['FPS_CAP'])
-
-        if PLAYING:
-            if maze_state == MazeState.SOLVING:
-                _solver()
-            else:
-                _step()
-
-
+        GENERATOR_SCREEN.start()
+        GENERATOR_SCREEN.loop()
+        SOLVER_SCREEN.MAZE = GENERATOR_SCREEN.maze
+        SOLVER_SCREEN._running = True
+        SOLVER_SCREEN.set_search_space(
+            GENERATOR_SCREEN.maze, 
+            GENERATOR_SCREEN.start_cell, 
+            GENERATOR_SCREEN.ending_cell
+        )
+        SOLVER_SCREEN.loop()
 
 if __name__ == '__main__':
     main()
