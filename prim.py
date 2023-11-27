@@ -1,7 +1,7 @@
 from random import choice, randint
 from Cell import Cell
 from Direction import Direction
-from maze import matrox_to_str_adjency_list, export_file, make_initial_maze, random_cell
+from maze import matrix_to_str_edgelist, export_file, make_initial_maze, random_cell
 
 def prim(maze: list[list[Cell]]):
     """ based on Iterative Prim:\n
@@ -72,7 +72,7 @@ def main():
         for m,t in maze_generator:
             pass
         if args.export:
-            maze_details = matrox_to_str_adjency_list(maze)
+            maze_details = matrix_to_str_edgelist(maze)
             export_file(maze_details, (STARTING_CELL, ENDING_CELL), args.export, traversal)
 
 if __name__ == '__main__':

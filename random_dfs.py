@@ -1,6 +1,6 @@
 import random
 from Cell import Cell
-from maze import matrox_to_str_adjency_list, export_file, make_initial_maze, random_cell
+from maze import matrix_to_str_edgelist, export_file, make_initial_maze, random_cell
 
 def random_dfs(length:int, width:int):
     """ Returns a tuple containing the STARTING cell, ENDING cell, and a generator function for creating the maze based on those cells"""
@@ -62,7 +62,7 @@ def main():
         for _, _ in maze_generator:
             pass
         if args.export:
-            maze_details = matrox_to_str_adjency_list(maze)
+            maze_details = matrix_to_str_edgelist(maze)
             export_file(maze_details, (STARTING_CELL, ENDING_CELL), args.export,traversal)
 
 if __name__ == '__main__':

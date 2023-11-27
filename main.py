@@ -4,7 +4,7 @@ from Cell import Cell
 from breadth_first_search import breadth_first_search
 from prim import prim
 from widgets import BoolVal, Button, Button, Text, TextField, RadioButton, Val
-from maze import as_matrix, export_file, import_file, import_maze_details, make_initial_maze, matrix_to_adjency_list, show_maze, matrox_to_str_adjency_list
+from maze import as_matrix, export_file, import_maze_details, make_initial_maze, matrix_to_edgelist, matrix_to_str_edgelist
 from random_dfs import random_dfs
 from depth_first_search import depth_first_search
 from a_star import a_star_search
@@ -54,7 +54,7 @@ def tile_position(SIZE:int):
         return (X_START, Y_START)
     return reposition
 
-def _main():
+def main():
     SIZE = 75
     width = 16 #len(maze[0])
     length = 8 #len(maze)
@@ -202,11 +202,11 @@ def _main():
             path, _traversal_order = a_star_search({
             "start": start_cell,
             "end": ending_cell,
-            "graph": matrix_to_adjency_list(maze),
+            "graph": matrix_to_edgelist(maze),
             }) or []
             traversal_order = [cell.coordinate for cell in _traversal_order]
         elif CONFIG["SOLVER"].value == "breadth_first_search": 
-            path, traversal_order = breadth_first_search(matrix_to_adjency_list(maze), start_cell, ending_cell)
+            path, traversal_order = breadth_first_search(matrix_to_edgelist(maze), start_cell, ending_cell)
         else:
             raise ValueError(f"Unknown algorithm: {CONFIG['SOLVER']}")
     def _solver():
@@ -304,7 +304,7 @@ def _main():
         filepath = filedialog.asksaveasfilename(defaultextension="json", filetypes=[("JSON", "*.json")], title="Save maze as JSON")
         if filepath and start_cell and ending_cell:
             export_file(
-                matrox_to_str_adjency_list(maze), 
+                matrix_to_str_edgelist(maze), 
                 (start_cell, ending_cell), 
                 filepath 
             )
@@ -316,8 +316,13 @@ def _main():
             return
         try:
             maze_details = import_maze_details(filepath)
+            _maze = as_matrix(maze_details["graph"])
+            # check the dimensions of this maze is the same with the constants. Otherwise show an error for now
+            if len(_maze) != length or len(_maze[0]) != width:
+                messagebox.showerror("Error", f"Failed to load maze!\n Maze dimensions must be {width} by {length}.\n Got {len(_maze[0])} by {len(_maze)} ")
+                return
             nonlocal maze, start_cell, ending_cell
-            maze = as_matrix(maze_details["graph"])
+            maze = _maze
             start_cell = maze_details["start"]
             ending_cell = maze_details["end"]
         except:
@@ -410,7 +415,6 @@ def _main():
     goal = animator("assets/goal/goal", "gif", 4, (SIZE-45))
     building = animator("assets/building/Building", "gif", 3, (SIZE))
 
-    
     # Start the game loop 
     while True:
         # Check for events
@@ -447,10 +451,10 @@ def _main():
         # Draw the game screen
         screen.fill((0, 0, 0))
         
-        player_x_pad = 14
-        player_y_pad = 3
-        goal_x_pad = 23
-        goal_y_pad = 8
+        PLAYER_X_PAD = 14
+        PLAYER_Y_PAD = 3
+        GOAL_X_PAD = 23
+        GOAL_Y_PAD = 8
         for y in range(length):
             for x in range(width):
                 cell = maze[y][x]
@@ -521,13 +525,13 @@ def _main():
         screen.blit(FPS_LABEL, FPS_LABEL_RECT)
         # Draw the player at the starting cell
         if maze_state == MazeState.SOLVING or maze_state == MazeState.SOLVED: # Compare maze state
-            xx,yy = reposition_img(player_coord[0], player_coord[1], player_x_pad, player_y_pad)
+            xx,yy = reposition_img(player_coord[0], player_coord[1], PLAYER_X_PAD, PLAYER_Y_PAD)
             screen.blit(next(player), (xx,yy))
             outline_x,outline_y = reposition_img(player_coord[0], player_coord[1])
             pygame.draw.rect(screen, (255,0,0),(outline_x,outline_y,SIZE,SIZE ), 6)
         else:
-            screen.blit(next(player), reposition_img(player_x, player_y, player_x_pad, player_y_pad))
-        screen.blit(next(goal), reposition_img(ending_cell.X, ending_cell.Y, goal_x_pad, goal_y_pad))
+            screen.blit(next(player), reposition_img(player_x, player_y, PLAYER_X_PAD, PLAYER_Y_PAD))
+        screen.blit(next(goal), reposition_img(ending_cell.X, ending_cell.Y, GOAL_X_PAD, GOAL_Y_PAD))
         FPS_FIELD.draw()
         P_CELL.draw()
         # Update the display
@@ -541,14 +545,6 @@ def _main():
             else:
                 _step()
 
-def main():
-    length = 8
-    width = 16
-    STARTING_CELL,ENDING_CELL, maze_generator,maze,path = random_dfs(length=length,width=width)
-    for _ in maze_generator:
-        pass
-    show_maze(maze, STARTING_CELL, ENDING_CELL)
-    _main()
 
 
 if __name__ == '__main__':

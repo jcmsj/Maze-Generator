@@ -1,4 +1,5 @@
 from random import randint
+from typing import Callable, TypeVar
 from Cell import Cell
 from Direction import DIRECTIONS, Direction
 from State import State
@@ -68,7 +69,10 @@ def random_cell(maze:list[list[Cell]]) -> Cell:
     Y = randint(0, length-1)
     return maze[Y][X]
 
-def as_matrix(adjacency_list: dict[Cell, list[Cell]]):
+
+T = TypeVar("T")
+EdgeList = dict[T, list[T]]
+def as_matrix(edgelist: EdgeList[Cell]):
     """Converts an adjacency list of Cells to a matrix
 
     Args:
@@ -78,12 +82,12 @@ def as_matrix(adjacency_list: dict[Cell, list[Cell]]):
         list[list[Cell]]: The matrix representation of the maze
     """
     # Get the length and width of the maze
-    length = max([cell.Y for cell in adjacency_list.keys()]) + 1
-    width = max([cell.X for cell in adjacency_list.keys()]) + 1
+    length = max([cell.Y for cell in edgelist.keys()]) + 1
+    width = max([cell.X for cell in edgelist.keys()]) + 1
     # Initialize the matrix
     matrix = [[Cell(x,y) for x in range(width)] for y in range(length)]
     # Fill the matrix with the cells from the adjacency list
-    for cell, neighbors in adjacency_list.items():
+    for cell, neighbors in edgelist.items():
         matrix[cell.Y][cell.X] = cell
         cell.walls = {direction:State.UNVISITED for direction in DIRECTIONS}
         for neighbor in neighbors:
@@ -94,43 +98,22 @@ def as_matrix(adjacency_list: dict[Cell, list[Cell]]):
 
     return matrix
 
-def matrox_to_str_adjency_list(maze: list[list[Cell]]) -> dict[str, list[str]]:
-    """
-    Generates an adjacency list representation of the given maze.
+def curried_matrix_to_edgelist(converter:Callable[[Cell], T]) -> Callable[[list[list[Cell]]], EdgeList[T]]:
+    def execute(maze:list[list[Cell]]) -> EdgeList[T]:
+        graph:EdgeList["T"] = {}
+        LENGTH = len(maze)
+        WIDTH = len(maze[0])
+        for y in range(LENGTH):
+            for x in range(WIDTH):
+                cell = maze[y][x]
+                converted = converter(cell)
+                graph[converted] = [converter(maze[y+d.value[1]][x+d.value[0]]) for d in cell.visited_walls()]
 
-    Parameters:
-    maze (list[list[Cell]]): The maze represented as a 2D list of Cell objects.
+        return graph
+    return execute
 
-    Returns:
-    dict[str, list[str]]: The adjacency list representation of the maze, where each key is a string representation of a cell and the corresponding value is a list of adjacent cells.
-    """
-    length = len(maze)
-    width = len(maze[0])
-    adj_list: dict[str, list[str]] = {}
-    for y in range(length):
-        for x in range(width):
-            cell = maze[y][x]
-            cell_str_representation:str = str(cell)
-            adj_list[cell_str_representation] = [] # will contain the string representations of the adjacent cells
-
-            for direction, state in cell.walls.items():
-                if state == State.VISITED:
-                    cell_at_direction = maze[y+direction.value[1]][x+direction.value[0]]
-                    adj_list[cell_str_representation].append(str(cell_at_direction))
-    return adj_list
-
-def matrix_to_adjency_list(maze:list[list[Cell]]):
-    adj_list:dict[Cell, list[Cell]] = {}
-    for y in range(len(maze)):
-        for x in range(len(maze[0])):
-            cell = maze[y][x]
-            adj_list[cell] = []
-            for direction, state in cell.walls.items():
-                if state == State.VISITED:
-                    cell_at_direction = maze[y+direction.value[1]][x+direction.value[0]]
-                    adj_list[cell].append(cell_at_direction)
-
-    return adj_list
+matrix_to_edgelist = curried_matrix_to_edgelist(lambda cell: cell)
+matrix_to_str_edgelist = curried_matrix_to_edgelist(lambda cell: str(cell))
 
 def show_maze(maze:list[list[Cell]], start_cell:Cell, ending_cell: Cell):
     """Prints the maze to the stdout by iterating over the y axis then the x axis. Only the north and west walls are checked for each cell to avoid double printing. Checking the East wall is handled by the next cell as that would be its west wall. While the South wall is handled by the cell below it as that would be its north wall."""
@@ -218,6 +201,6 @@ def main():
         maze_details = import_maze_details(args.file)
         maze = as_matrix(maze_details['graph'])
         show_maze(maze, maze_details['start'], maze_details['end'])
-
+        
 if __name__ == '__main__':
     main()
