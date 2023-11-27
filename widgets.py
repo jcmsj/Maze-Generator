@@ -7,7 +7,7 @@ T = TypeVar("T")
 class Val[T]:
     def __init__(self, val:T, observers=None):
         self._val:T = val
-        self.observers:list[Callable[[bool], None]] = observers if observers is not None else []
+        self.observers:list[Callable[[T], None]] = observers if observers is not None else []
 
     def __repr__(self):
         return f"Val({self._val})"
