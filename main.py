@@ -220,13 +220,7 @@ class GeneratorScreen:
         self.PLAYING.to_false()
     def skip(self):
         while self.gen != None:
-            try:
-                next(self.gen)
-            except:
-                self.PLAYING.to_false()
-                self.traversal = []
-                self.gen = None
-                self.generated = True
+            self.step()
 
     def loop(self):
         while self._running:
@@ -247,6 +241,13 @@ class GeneratorScreen:
                     button.listen(event)
                 self.save_button.listen(event)
                 self.load_button.listen(event)
+
+                # toggle playing on spacebar
+                if event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE:
+                    if self.generated:
+                        self.end()
+                    else:
+                        self.PLAYING.toggle()
             # Draw the game screen
             self.screen.fill((0, 0, 0))
             # Draw the maze
@@ -272,7 +273,7 @@ class GeneratorScreen:
             self.FPS_FIELD.draw()
             self.save_button.draw()
             self.load_button.draw()
-            # Paint the radio buttosn
+            # Paint the radio buttons
             for button in self.RADIO_BUTTONS:
                 button.draw(self.screen)
             # Update the display
@@ -327,7 +328,7 @@ class SolverScreen:
         self.paths = paths
         self.reposition_img = tile_position(SIZE)
         self.MAZE:list[list[Cell]] = maze
-        self.traversal = []
+        self.traversal_order = []
         self.start_cell:Cell = None # type: ignore
         self.ending_cell:Cell = None # type: ignore
         self.PLAYING = BoolVal(False)
@@ -401,10 +402,10 @@ class SolverScreen:
                 Colors.BLACK,
             ),
         )
-        self.RESTART_BUTTON = Button(
+        self.REGENERATE_BUTTON = Button(
         onclick= self.end,
             text=Text(
-                'replay',
+                'construction',
                 screen,
                 Fonts.materialIcons,
                 self.reposition_img(16.5, 1.5), # type: ignore
@@ -422,15 +423,22 @@ class SolverScreen:
             Colors.BLACK, 
         )
         self.player_coord.observers.append(lambda v: self.P_CELL.update(v.__repr__()))
-
         self.FPS_FIELD = FPS_FIELD
         self.FPS_LABEL =  FPS_LABEL
         self.FPS_LABEL_RECT = FPS_LABEL_RECT
+
+        # Setup the trail
+        self.trail_image = load_image("assets/footPath/left.png", (SIZE-40), (SIZE-40))
+        self.visited_coords = []
+        self.player_coord.observers.append(lambda c: self.visited_coords.append((c[0], c[1])))
+
+
     def end(self):
         self._running = False
     def skip(self):
         self.PLAYING.to_false()
         self.index = 0
+        self.visited_coords = self.traversal_order
         self.traversal_order = []
         self.player_coord.set((self.ending_cell.coordinate))
     def player_movement(self,x_increase, y_increase):
@@ -443,17 +451,19 @@ class SolverScreen:
             self.player_coord.set((self.player_coord.value[0], self.player_coord.value[1] + y_increase))
         elif y_increase == 1 and 'S' in player_walls:
             self.player_coord.set((self.player_coord.value[0], self.player_coord.value[1] + y_increase))
-    def set_search_space(self, maze:list[list[Cell]], start_cell:Cell, ending_cell:Cell):
+    def search(self, maze:list[list[Cell]], start_cell:Cell, ending_cell:Cell):
         self.MAZE = maze
         self.start_cell = start_cell
         self.ending_cell = ending_cell
         self.player_coord.set(self.start_cell.coordinate)
-
+        self.visited_coords = []
+        self.start()
 
     def start(self, _=None):
         print("solving")
         self.player_coord.set(self.start_cell.coordinate)
         self.index = 0
+        self.visited_coords = []
         if CONFIG["SOLVER"].value == "depth_first_search":
             self.path, self.traversal_order = depth_first_search(self.MAZE, self.start_cell, self.ending_cell)
         elif CONFIG["SOLVER"].value == "a_star": 
@@ -478,7 +488,7 @@ class SolverScreen:
                 else:
                     self.SEARCH_BUTTON.listen(event)
                 self.SKIP_BUTTON.listen(event)
-                self.RESTART_BUTTON.listen(event)
+                self.REGENERATE_BUTTON.listen(event)
                 self.FPS_FIELD.listen(event)
                 for button in self.RADIO_BUTTONS:
                     button.listen(event)
@@ -486,6 +496,10 @@ class SolverScreen:
                 self.load_button.listen(event)
                 if event.type == pygame.KEYDOWN:
                     self.player_movement(int(event.key == pygame.K_d) - int(event.key == pygame.K_a),int(event.key == pygame.K_s) - int(event.key == pygame.K_w))
+
+                # toggle playing on spacebar
+                if event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE:
+                    self.start_or_continue()
             
             # Draw the game screen
             self.screen.fill((0, 0, 0))
@@ -505,7 +519,7 @@ class SolverScreen:
             else:
                 self.SEARCH_BUTTON.draw()
             self.SKIP_BUTTON.draw()
-            self.RESTART_BUTTON.draw()
+            self.REGENERATE_BUTTON.draw()
             self.screen.blit(self.FPS_LABEL, self.FPS_LABEL_RECT)
             self.FPS_FIELD.draw()
             self.save_button.draw()
@@ -531,6 +545,10 @@ class SolverScreen:
                     self.GOAL_Y_PAD
                 )
             )
+            # Draw the trail:
+            for cell_coord in self.visited_coords:
+                trail_x, trail_y = self.reposition_img(cell_coord[0], cell_coord[1], self.PLAYER_X_PAD, (self.PLAYER_Y_PAD + 15))
+                self.screen.blit(self.trail_image, (trail_x, trail_y)) 
             # Update the display
             pygame.display.flip()
             # limit FPS
@@ -674,7 +692,7 @@ def main():
             GENERATOR_SCREEN.ending_cell = maze_details["end"]
             GENERATOR_SCREEN.end()
             if SOLVER_SCREEN._running:
-                SOLVER_SCREEN.set_search_space(
+                SOLVER_SCREEN.search(
                     GENERATOR_SCREEN.maze,
                     GENERATOR_SCREEN.start_cell,
                     GENERATOR_SCREEN.ending_cell
@@ -737,7 +755,7 @@ def main():
         GENERATOR_SCREEN.loop()
         SOLVER_SCREEN.MAZE = GENERATOR_SCREEN.maze
         SOLVER_SCREEN._running = True
-        SOLVER_SCREEN.set_search_space(
+        SOLVER_SCREEN.search(
             GENERATOR_SCREEN.maze, 
             GENERATOR_SCREEN.start_cell, 
             GENERATOR_SCREEN.ending_cell
