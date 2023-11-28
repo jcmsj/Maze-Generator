@@ -6,7 +6,8 @@ from maze import matrix_to_str_edgelist, export_file, make_initial_maze, random_
 def prim(maze: list[list[Cell]]):
     """ based on Iterative Prim:\n
     https://en.wikipedia.org/wiki/Maze_generation_algorithm 
-        Returns a tuple containing the STARTING cell, ENDING cell, and a generator function for creating the maze based on those cells. Note: The ending cell doesnt matter in contrast to random dfs.
+        Returns a tuple containing the STARTING cell, ENDING cell, and a generator function for creating the maze based on those cells. 
+        Note: The start and end cells doesnt actually matter.
     """
 
     # 1. Start with a grid full of walls.
@@ -18,7 +19,6 @@ def prim(maze: list[list[Cell]]):
     
     # 2. Pick a cell
     start = random_cell(maze)
-
 
     # Make use of a generator, because for the GUIs, we want to show the maze being generated, step by step. This can be most conveniently done with a generator.
     traversal = [start]
