@@ -434,9 +434,9 @@ class SolverScreen:
             Direction.NORTH: load_image("assets/footPath/N.png", (SIZE-40), (SIZE-40)),
             Direction.SOUTH: load_image("assets/footPath/S.png", (SIZE-40), (SIZE-40)),
         }
-        self.visited_coords: list[tuple[int,int, Direction]] = []
+        self.visited_coords: list[tuple[tuple[int,int], Direction]] = []
         self.player_coord.observers.append(self.add_visited_coords)
-        self.directions:list[tuple[int,int, Direction]] = []
+        self.directions:list[tuple[tuple[int,int], Direction]] = []
         self.highlighted_path_sprites = {
             Direction.WEST: load_image("assets/footPathHiglight/W.png", (SIZE-40), (SIZE-40)),
             Direction.EAST: load_image("assets/footPathHiglight/E.png", (SIZE-40), (SIZE-40)),
@@ -445,6 +445,8 @@ class SolverScreen:
         }
         self.solved = False
         self.flag_sprite = animator("assets/flag/flag", "png", 7, (SIZE-45))
+        self.flagPosition = (-1,-1)
+        self.goalPosition = (-1,-1)
 
     def determine_direction(self, to:tuple[int,int], cur:tuple[int,int, Direction|None] = (0,0, None) ):
         dx = to[0] - cur[0]
@@ -477,39 +479,46 @@ class SolverScreen:
             if cell.walls[dir] == State.VISITED:
                 return dir
         return None
-    def add_visited_coords(self,c:tuple[int,int]):
+    def add_visited_coords(self,coord:tuple[int,int]):
         d = self.calc_direction(
-            to=c, 
+            to=coord, 
             basis=self.traversal_order
         )
         if d == None:
             return
-        self.visited_coords.append((*c, d))
+        
+        coord = self.reposition_img(coord[0], coord[1], self.PLAYER_X_PAD+8, self.PLAYER_Y_PAD + 15)
+        self.visited_coords.append((coord, d))
     def end(self):
         self._running = False
         self.solved = False
     def skip(self):
         self.PLAYING.to_false()
         self.index = 0
-        visited_coords = [
-            (*c,self.calc_direction(
+        self.player_coord.set((self.ending_cell.coordinate))
+        self.visited_coords = [c for c in [ # type: ignore
+            (self.reposition_img(*c, self.PLAYER_X_PAD+8, self.PLAYER_Y_PAD + 15),self.calc_direction(
             to=c, 
             basis=self.traversal_order)
-        ) for c in self.traversal_order]
-        self.visited_coords = [c for c in visited_coords if c[2] != None] # type: ignore
+        ) for c in self.traversal_order] if c[1] != None] 
         self.traversal_order = []
-        self.player_coord.set((self.ending_cell.coordinate))
         self.solved = True
     def player_movement(self,x_increase, y_increase):
         player_walls = [str(d) for d in self.MAZE[self.player_coord.value[1]][self.player_coord.value[0]].visited_walls()]
-        if x_increase == -1 and 'W' in player_walls:
-            self.player_coord.set((self.player_coord.value[0] + x_increase, self.player_coord.value[1]))
-        elif x_increase == 1 and 'E' in player_walls:
-            self.player_coord.set((self.player_coord.value[0] + x_increase, self.player_coord.value[1]))
-        if y_increase == -1 and 'N' in player_walls:
-            self.player_coord.set((self.player_coord.value[0], self.player_coord.value[1] + y_increase))
-        elif y_increase == 1 and 'S' in player_walls:
-            self.player_coord.set((self.player_coord.value[0], self.player_coord.value[1] + y_increase))
+        if x_increase == -1 and 'W' in player_walls or x_increase == 1 and 'E' in player_walls:
+            # add the current position to the traversal order
+            self.traversal_order.append(self.player_coord.value)
+            self.player_coord.set((
+                self.player_coord.value[0] + x_increase, # dx
+                self.player_coord.value[1])
+            )
+
+        if y_increase == -1 and 'N' in player_walls or y_increase == 1 and 'S' in player_walls:
+            self.traversal_order.append(self.player_coord.value)
+            self.player_coord.set((
+                self.player_coord.value[0], 
+                self.player_coord.value[1] + y_increase # dy
+            ))
     def search(self, maze:list[list[Cell]], start_cell:Cell, ending_cell:Cell):
         self.MAZE = maze
         self.start_cell = start_cell
@@ -540,7 +549,18 @@ class SolverScreen:
             self.path = [] if path == None else [cell.coordinate for cell in path]
         else:
             raise ValueError(f"Unknown algorithm: {CONFIG['SOLVER']}")
-        self.directions = [(*self.path[i],self.calc_direction(self.path[i], self.path)) for i in range(1, len(self.path))] # type: ignore
+        
+        # Note: The main loop can be optimized by pre-calculating the tile positions
+        self.directions = [ # type: ignore
+            (self.reposition_img( 
+                *self.path[i],
+                self.PLAYER_X_PAD + 8,
+                self.PLAYER_Y_PAD + 15),
+                self.calc_direction(self.path[i], self.path)
+            ) for i in range(len(self.path))
+        ] 
+        self.goalPosition = self.reposition_img(self.ending_cell.X, self.ending_cell.Y, self.GOAL_X_PAD, self.GOAL_Y_PAD)
+        self.flagPosition = self.reposition_img(self.start_cell.X, self.start_cell.Y, self.GOAL_X_PAD, self.GOAL_Y_PAD)
     
     def loop(self):
         while self._running:
@@ -595,18 +615,18 @@ class SolverScreen:
                 button.draw(self.screen)
 
             # Draw the trail:
-            for x,y, dir in self.visited_coords:
-                trail_coord = self.reposition_img(x,y, self.PLAYER_X_PAD+8, (self.PLAYER_Y_PAD + 15))
+            for trail_coord, dir in self.visited_coords:
                 self.screen.blit(self.trail_sprites[dir], trail_coord) 
             # Draw the highlighted path
             if self.solved:
-                for x,y,dir in self.directions:
-                    self.screen.blit(self.highlighted_path_sprites[dir], self.reposition_img(x, y, self.PLAYER_X_PAD+8, (self.PLAYER_Y_PAD + 15)))
+                for highlighted_coord,dir in self.directions:
+                    self.screen.blit(self.highlighted_path_sprites[dir], highlighted_coord)
 
             #Draw the flag
-            self.screen.blit(next(self.flag_sprite), self.reposition_img(self.start_cell.X, self.start_cell.Y, self.GOAL_X_PAD, self.GOAL_Y_PAD))
+            self.screen.blit(next(self.flag_sprite), self.flagPosition)
             
             # Draw the player
+            # TODO: optimize the player and red outline by pre-calculating the tile positions
             xx,yy = self.reposition_img(self.player_coord.value[0], self.player_coord.value[1], self.PLAYER_X_PAD,self. PLAYER_Y_PAD)
             self.screen.blit(next(self.PLAYER), (xx,yy))
             outline_x,outline_y = self.reposition_img(self.player_coord.value[0], self.player_coord.value[1])
@@ -615,12 +635,7 @@ class SolverScreen:
             # Draw the goal
             self.screen.blit(
                 next(self.GOAL), 
-                self.reposition_img(
-                    self.ending_cell.X, 
-                    self.ending_cell.Y, 
-                    self.GOAL_X_PAD,
-                    self.GOAL_Y_PAD
-                )
+                self.goalPosition
             )
 
             # Update the display
@@ -659,8 +674,7 @@ def render_maze(
         for x in range(width):
             cell = maze[y][x]
             position = reposition_img(x,y)
-            direction_list = [str(d) for d in cell.visited_walls()]
-            direction_str = ''.join(direction_list)
+            direction_str = "".join([str(d) for d in cell.visited_walls()])
             
             match direction_str:
                 case '':
