@@ -183,22 +183,23 @@ class Button:
 class RadioButton:
     
     def __init__(self, assigned, text, x, y, checked =False, onclick = None):
-        self.rect = pygame.Rect(x, y, 12, 12)
         self.assigned = assigned
         self.text = text
         self.checked = checked
         self.onclick = onclick
+        self.font = pygame.font.Font(None, 24)
+        self.label = self.font.render(self.text, 1, (255,255,255))
+        self.rect = pygame.Rect(x, y, 12, 12)
+        self.text_rect = pygame.Rect(x + 20, y, self.label.get_width(), self.label.get_height())
     def draw(self, screen):
         pygame.draw.rect(screen, (255, 255, 255), self.rect, 0 if self.checked else 1)
-        font = pygame.font.Font(None, 24)
-        label = font.render(self.text, 1, (255,255,255))
-        screen.blit(label, (self.rect.x + 20, self.rect.y))
+        screen.blit(self.label, (self.rect.x + 20, self.rect.y))
     def listen(self, event:pygame.event.Event):
         if self.onclick == None:
             return
         
         if event.type == pygame.MOUSEBUTTONUP:
-            if self.rect.collidepoint(event.pos):
+            if self.rect.collidepoint(event.pos) or self.text_rect.collidepoint(event.pos):
                 print("onClick")
                 self.onclick()
                     
