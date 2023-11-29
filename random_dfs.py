@@ -1,10 +1,11 @@
 import random
 from Cell import Cell
+from Direction import Direction
 from maze import matrix_to_str_edgelist, export_file, make_initial_maze, random_cell
 
 def random_dfs(length:int, width:int):
     """ Returns a tuple containing the STARTING cell, ENDING cell, and a generator function for creating the maze based on those cells"""
-    maze = make_initial_maze(length, width)
+    maze:list[list[Cell]] = make_initial_maze(length, width)
     # (1) Choose the initial cell, mark it as visited and push it to the stack
     STARTING_CELL = random_cell(maze)
     ENDING_CELL = random_cell(maze)
@@ -24,7 +25,7 @@ def random_dfs(length:int, width:int):
         while len(stack) > 0:
             current: Cell = stack.pop()
             # (2) If the chosen cell has any unvisited neighbours
-            neighbors = get_neighbors(current)
+            neighbors: list[tuple[Direction, Cell]] = get_neighbors(current)
             if len(neighbors) == 0:
                 path.append(current)
                 yield maze, path
@@ -36,7 +37,7 @@ def random_dfs(length:int, width:int):
             # (2.3) Put back current
             stack.append(current)
             # (2.4) push chosen to the stack, 
-            # since we want to visit it next, since dfs
+            # since we want to visit it next, since it is dfs
             stack.append(chosen)
             path.append(chosen)
             yield maze, path
