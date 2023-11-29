@@ -36,13 +36,13 @@ def a_star_search(maze_info):
             return path_list, visited_cells
         for neighbor in maze[current_cell]:
             new_cost = cost_so_far[current_cell] + 1
+            visited_cells.append(neighbor)
             if neighbor not in cost_so_far or new_cost < cost_so_far[neighbor]:
                 cost_so_far[neighbor] = new_cost
                 priority = new_cost + heuristic(ending_cell, neighbor)
                 queue.put((priority, neighbor))  
                 path[neighbor] = current_cell
-                if neighbor not in visited_cells: 
-                    visited_cells.append(neighbor)
+                # if neighbor not in visited_cells: 
                
     # If ending cell was not found, return None
     return None, visited_cells
