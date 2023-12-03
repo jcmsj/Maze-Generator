@@ -79,6 +79,10 @@ class PlayerRenderer:
         self.scaled_coord = (-1,-1)
         self.coord.observers.append(self.scale)
         self.reposition_img = reposition_img
+        self.left_pressed = False
+        self.right_pressed = False
+        self.up_pressed = False
+        self.down_pressed = False
 
     def scale(self, coord:tuple[int,int]):
         self.scaled_coord = self.reposition_img(coord[0], coord[1], self.X_PAD,self.Y_PAD)
@@ -355,7 +359,25 @@ class SolverScreen:
                 self.save_button.listen(event)
                 self.load_button.listen(event)
                 if event.type == pygame.KEYDOWN:
-                    self.player_movement(int(event.key == pygame.K_d) - int(event.key == pygame.K_a),int(event.key == pygame.K_s) - int(event.key == pygame.K_w))
+                    if event.key == pygame.K_w:
+                        self.PLAYER.up_pressed = True
+                    if event.key == pygame.K_a:
+                        self.PLAYER.left_pressed = True
+                    if event.key == pygame.K_s:
+                        self.PLAYER.down_pressed = True
+                    if event.key == pygame.K_d:
+                        self.PLAYER.right_pressed = True
+                if event.type == pygame.KEYUP:
+                    if event.key == pygame.K_w:
+                        self.PLAYER.up_pressed = False
+                    if event.key == pygame.K_a:
+                        self.PLAYER.left_pressed = False
+                    if event.key == pygame.K_s:
+                        self.PLAYER.down_pressed = False
+                    if event.key == pygame.K_d:
+                        self.PLAYER.right_pressed = False
+                
+                self.player_movement(int(self.PLAYER.right_pressed) - int(self.PLAYER.left_pressed),int(self.PLAYER.down_pressed) - int(self.PLAYER.up_pressed))
 
                 # toggle playing on spacebar
                 if event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE:
