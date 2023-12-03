@@ -132,7 +132,7 @@ class TrailRenderer:
     def skip(self):
         for coord in self.traversal_order:
             self.add_visited_coords(coord)
-        self.traversal_order = []
+        # self.traversal_order = []
 
 class SolverScreen:
     def __init__(
@@ -198,6 +198,17 @@ class SolverScreen:
             onclick= self.PLAYING.to_false,
             text=Text(
                 'pause',
+                self.screen,
+                Fonts.materialIcons,
+                self.reposition_img(16.5, 0.5), # type: ignore
+                Colors.WHITE,
+                Colors.BLACK,
+            ),
+        )
+        self.RESTART_BUTTON = Button(
+            onclick= self.start,
+            text=Text(
+                'replay',
                 self.screen,
                 Fonts.materialIcons,
                 self.reposition_img(16.5, 0.5), # type: ignore
@@ -275,12 +286,43 @@ class SolverScreen:
             (self.PLAYER.X_PAD+8, self.PLAYER.Y_PAD + 15),
             self.reposition_img) # type: ignore
 
+        self.NEXT_STEP = Button(
+            onclick= self.step,
+            text=Text(
+                'skip_next',
+                self.screen,
+                Fonts.materialIcons,
+                self.reposition_img(14.5, 8.5), # type: ignore
+                Colors.WHITE,
+                Colors.BLACK,
+            ),
+        )
+        self.STEP_LABEL = TextField(
+            self.screen, 
+            "Step", 
+            self.reposition_img(13.5, 8.5), 
+            Fonts.textFont, 
+            Colors.WHITE, 
+            Colors.BLACK
+        )
+        self.PLAYER.coord.observers.append(lambda _: self.STEP_LABEL.update(f"{self.index}"))
+        self.PREVIOUS_STEP = Button(
+            onclick= self.undo,
+            text=Text(
+                'skip_previous',
+                self.screen,
+                Fonts.materialIcons,
+                self.reposition_img(12.5, 8.5), # type: ignore
+                Colors.WHITE,
+                Colors.BLACK,
+            ),
+        )
     def end(self):
         self._running = False
         self.solved = False
     def skip(self):
         self.PLAYING.to_false()
-        self.index = 0
+        self.index = len(self.trailRenderer.traversal_order)
         self.trailRenderer.skip()
         self.PLAYER.coord.set(self.ending_cell.coordinate)
         self.solved = True
@@ -304,8 +346,8 @@ class SolverScreen:
         self.MAZE = maze
         self.start_cell = start_cell
         self.ending_cell = ending_cell
-        self.PLAYER.coord.set(self.start_cell.coordinate)
-        self.trailRenderer.visited_coords = []
+        # self.PLAYER.coord.set(self.start_cell.coordinate)
+        # self.trailRenderer.visited_coords = []
         self.start()
 
     def start(self, _=None):
@@ -345,8 +387,14 @@ class SolverScreen:
 
                 if self.PLAYING:
                     self.PAUSE_BUTTON.listen(event)
+                elif self.solved:
+                    self.RESTART_BUTTON.listen(event)
                 else:
                     self.SEARCH_BUTTON.listen(event)
+
+                if not self.solved:
+                    self.NEXT_STEP.listen(event)
+                self.PREVIOUS_STEP.listen(event)
                 self.SKIP_BUTTON.listen(event)
                 self.REGENERATE_BUTTON.listen(event)
                 self.FPS_FIELD.listen(event)
@@ -379,8 +427,13 @@ class SolverScreen:
             # show the UI for generating
             if self.PLAYING:
                 self.PAUSE_BUTTON.draw()
+            elif self.solved:
+                self.RESTART_BUTTON.draw()
             else:
                 self.SEARCH_BUTTON.draw()
+            self.NEXT_STEP.draw()
+            self.PREVIOUS_STEP.draw()
+            self.STEP_LABEL.draw()
             self.SKIP_BUTTON.draw()
             self.REGENERATE_BUTTON.draw()
             self.screen.blit(self.FPS_LABEL, self.FPS_LABEL_RECT)
@@ -427,10 +480,17 @@ class SolverScreen:
             self.index += 1
         else:
             self.PLAYING.to_false()
-            self.index = 0
-            self.traversal_order = []
+            self.index = len(self.trailRenderer.traversal_order)
             self.PLAYER.coord.set(self.ending_cell.coordinate)
             self.solved = True
+    def undo(self):
+        if self.solved:
+            self.solved = False
+
+        if self.index > 0:
+            self.index -= 1
+            self.PLAYER.coord.set(self.trailRenderer.traversal_order[self.index])
+
 
     def start_or_continue(self):
         self.PLAYING.to_true()
