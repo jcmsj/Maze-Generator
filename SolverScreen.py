@@ -1,0 +1,424 @@
+from typing import Callable
+from Animator import animator, load_image
+from CONFIG import CONFIG, curried_select
+from Cell import Cell
+from Colors import Colors
+from Direction import Direction
+from Fonts import Fonts
+from a_star import a_star_search
+from breadth_first_search import breadth_first_search
+from depth_first_search import depth_first_search
+from maze import matrix_to_edgelist
+from render_maze import render_maze, tile_position
+from widgets import BoolVal, Button, RadioButton, Text, TextField, Val
+import pygame
+
+def neighbor_at(
+    MAZE:list[list[Cell]],
+    cell:Cell,
+    direction:Direction
+):
+    dx,dy = direction.value
+    return MAZE[cell.Y + dy][cell.X + dx]
+def calc_direction(
+    MAZE: list[list[Cell]],
+    to:tuple[int,int], 
+    traversal_order: list[tuple[int,int]]
+):
+    target = MAZE[to[1]][to[0]]
+    # get neighboring cells
+    neighbors = [(d,neighbor_at(MAZE, target, Direction(d))) for d in target.visited_walls()]
+    for direction,neighbor in neighbors:
+        # from the end, check if the coordinate exists
+        for i in range(len(traversal_order)-1, -1, -1):
+            if traversal_order[i] == neighbor.coordinate:
+                #  if it does, use the inverse
+                return direction.inverse()
+
+class HighlightedPathRender:
+    def __init__(
+            self, 
+            SIZE:int,
+            PATH_PAD:tuple[int,int],
+            reposition_img:Callable[[int,int, int,int],tuple[int,int]],
+        ):
+        self.SIZE = SIZE
+        self.highlighted_path_sprites = {
+            Direction.WEST: load_image("assets/footPathHiglight/W.png", SIZE, SIZE),
+            Direction.EAST: load_image("assets/footPathHiglight/E.png", SIZE, SIZE),
+            Direction.NORTH: load_image("assets/footPathHiglight/N.png", SIZE, SIZE),
+            Direction.SOUTH: load_image("assets/footPathHiglight/S.png", SIZE, SIZE),
+        }
+        self.directions:list[tuple[tuple[int,int], Direction]] = []
+        self.PATH_PAD_X = PATH_PAD[0]
+        self.PATH_PAD_Y = PATH_PAD[1]
+        self.reposition_img = reposition_img
+ 
+    def render(self, screen:pygame.Surface):
+        for highlighted_coord,dir in self.directions:
+            screen.blit(self.highlighted_path_sprites[dir], highlighted_coord)
+    def calculate(
+        self, 
+        path:list[tuple[int,int]],
+        maze: list[list[Cell]],
+        ):
+        self.directions = [( # type: ignore
+            self.reposition_img(*path[i], self.PATH_PAD_X, self.PATH_PAD_Y), calc_direction(maze,path[i], path)) for i in range(len(path))
+        ]
+
+class TrailRenderer:
+    def __init__(
+            self,
+            MAZE: list[list[Cell]],
+            SIZE:int, 
+            reposition_img:Callable[[int|float,int|float, int,int],tuple[int,int]],
+            TRAIL_PAD :tuple[int,int]
+    ):
+        self.SIZE = SIZE
+        self.MAZE = MAZE
+        self.reposition_img = reposition_img
+        self.visited_coords: list[tuple[tuple[int,int], Direction]] = []
+        self.traversal_order: list[tuple[int,int]] = []
+        self.TRAIL_X_PAD = TRAIL_PAD[0]
+        self.TRAIL_Y_PAD = TRAIL_PAD[1]
+
+        self.trail_sprites = {
+            Direction.WEST: load_image("assets/footPath/W.png", SIZE, SIZE),
+            Direction.EAST: load_image("assets/footPath/E.png", SIZE, SIZE),
+            Direction.NORTH: load_image("assets/footPath/N.png", SIZE, SIZE),
+            Direction.SOUTH: load_image("assets/footPath/S.png", SIZE, SIZE),
+        }
+        self.highlighted_path_sprites = {
+            Direction.WEST: load_image("assets/footPathHiglight/W.png", SIZE, SIZE),
+            Direction.EAST: load_image("assets/footPathHiglight/E.png", SIZE, SIZE),
+            Direction.NORTH: load_image("assets/footPathHiglight/N.png", SIZE,SIZE),
+            Direction.SOUTH: load_image("assets/footPathHiglight/S.png", SIZE,SIZE),
+        }
+
+    def add_visited_coords(self,coord:tuple[int,int]):
+        d = calc_direction(
+            MAZE=self.MAZE,
+            to=coord,
+            traversal_order=self.traversal_order
+        )
+        if d == None:
+            return
+
+        self.visited_coords.append((self.reposition(coord), d))
+
+    def render(self, screen:pygame.Surface):
+        for trail_coord, dir in self.visited_coords:
+            screen.blit(self.trail_sprites[dir], trail_coord)
+    def reposition(self, coord: tuple[int,int]):
+        return self.reposition_img(coord[0], coord[1], self.TRAIL_X_PAD, self.TRAIL_Y_PAD)
+    def skip(self):
+        for coord in self.traversal_order:
+            self.add_visited_coords(coord)
+class SolverScreen:
+    def __init__(
+        self,
+        SIZE:int,
+        width:int,
+        length:int,
+        screen:pygame.Surface,
+        paths:dict[str,pygame.Surface],
+        maze: list[list[Cell]],
+        save_button: Button,
+        load_button: Button,
+        FPS_FIELD: TextField,
+        FPS_LABEL: pygame.Surface,
+        FPS_LABEL_RECT: pygame.Rect,
+    ):
+        self.SIZE = SIZE
+        self.width = width
+        self.length = length
+        self.screen = screen
+        self.paths = paths
+        self.path = []
+        self.reposition_img = tile_position(SIZE)
+        self.MAZE:list[list[Cell]] = maze
+        self.start_cell:Cell = None # type: ignore
+        self.ending_cell:Cell = None # type: ignore
+        self.PLAYING = BoolVal(False)
+        self.save_button = save_button
+        self.load_button = load_button
+        self._running = True
+        self.index = 0
+        self.PLAYER = animator("assets/ekko/idle/ekkoidle", "png", 8, (SIZE-30))
+        self.GOAL = animator("assets/goal/goal", "gif", 4, (SIZE-45))
+
+        self.PLAYER_X_PAD = 14
+        self.PLAYER_Y_PAD = 3
+        self.GOAL_X_PAD = 23
+        self.player_coord:Val[tuple[int,int]]= Val((-1,-1))
+        self.GOAL_Y_PAD = 8
+        self.RADIO_BUTTONS = [
+            RadioButton(
+                assigned = "a_star",
+                text = 'A*',
+                x = 150,
+                y = 615,
+            ),
+            RadioButton(
+                assigned = 'breadth_first_search',
+                text = 'BFS',
+                x = 400,
+                y = 615,
+                checked = True
+            ),
+            RadioButton(
+                assigned = 'depth_first_search',
+                text = 'DFS',
+                x = 650,
+                y = 615,
+            )
+        ]
+
+        self.set_algo = curried_select("SOLVER")(self.RADIO_BUTTONS)
+        for button in self.RADIO_BUTTONS:
+            button.onclick = self.set_algo(button.assigned)
+        CONFIG["SOLVER"].observers.append(self.start)
+        self.PAUSE_BUTTON = Button(
+            onclick= self.PLAYING.to_false,
+            text=Text(
+                'pause',
+                self.screen,
+                Fonts.materialIcons,
+                self.reposition_img(16.5, 0.5), # type: ignore
+                Colors.WHITE,
+                Colors.BLACK,
+            ),
+        )
+        self.SEARCH_BUTTON = Button(
+            onclick= self.start_or_continue,
+            text=Text(
+                'search',
+                self.screen,
+                Fonts.materialIcons,
+                self.reposition_img(16.5, 0.5), # type: ignore
+                Colors.WHITE,
+                Colors.BLACK,
+            ),
+        )
+        self.SKIP_BUTTON = Button(
+            onclick= self.skip,
+            text=Text(
+                'fast_forward',
+                self.screen,
+                Fonts.materialIcons,
+                self.reposition_img(16.5,2.5), # type: ignore
+                Colors.WHITE,
+                Colors.BLACK,
+            ),
+        )
+        self.REGENERATE_BUTTON = Button(
+        onclick= self.end,
+            text=Text(
+                'construction',
+                screen,
+                Fonts.materialIcons,
+                self.reposition_img(16.5, 1.5), # type: ignore
+                Colors.WHITE,
+                Colors.BLACK,
+            ),
+        )
+
+        self.P_CELL = TextField(
+            screen,
+            self.player_coord.value.__repr__(),
+            self.reposition_img(16.5,5),
+            Fonts.textFont,
+            Colors.WHITE,
+            Colors.BLACK,
+        )
+        self.player_coord.observers.append(lambda v: self.P_CELL.update(v.__repr__()))
+        self.FPS_FIELD = FPS_FIELD
+        self.FPS_LABEL =  FPS_LABEL
+        self.FPS_LABEL_RECT = FPS_LABEL_RECT
+
+        # Setup the trail
+        self.trail_sprites = {
+            Direction.WEST: load_image("assets/footPath/W.png", (SIZE-40), (SIZE-40)),
+            Direction.EAST: load_image("assets/footPath/E.png", (SIZE-40), (SIZE-40)),
+            Direction.NORTH: load_image("assets/footPath/N.png", (SIZE-40), (SIZE-40)),
+            Direction.SOUTH: load_image("assets/footPath/S.png", (SIZE-40), (SIZE-40)),
+        }
+        self.solved = False
+        self.flag_sprite = animator("assets/flag/flag", "png", 7, (SIZE-45))
+        self.flagPosition = (-1,-1)
+        self.goalPosition = (-1,-1)
+        self.trailRenderer = TrailRenderer(
+            self.MAZE,
+            self.SIZE-40,
+            self.reposition_img,
+            (self.PLAYER_X_PAD+8, self.PLAYER_Y_PAD + 15)
+        )
+        self.player_coord.observers.append(self.trailRenderer.add_visited_coords)
+        self.pathRenderer = HighlightedPathRender(
+            self.SIZE-40,
+            (self.PLAYER_X_PAD+8, self.PLAYER_Y_PAD + 15),
+            self.reposition_img) # type: ignore
+
+    def end(self):
+        self._running = False
+        self.solved = False
+    def skip(self):
+        self.PLAYING.to_false()
+        self.index = 0
+        self.trailRenderer.skip()
+        self.trailRenderer.traversal_order = []
+        self.player_coord.set((self.ending_cell.coordinate))
+        self.solved = True
+    def player_movement(self,x_increase, y_increase):
+        player_walls = [str(d) for d in self.MAZE[self.player_coord.value[1]][self.player_coord.value[0]].visited_walls()]
+        if x_increase == -1 and 'W' in player_walls or x_increase == 1 and 'E' in player_walls:
+            # add the current position to the traversal order
+            self.trailRenderer.traversal_order.append(self.player_coord.value)
+            self.player_coord.set((
+                self.player_coord.value[0] + x_increase, # dx
+                self.player_coord.value[1])
+            )
+
+        if y_increase == -1 and 'N' in player_walls or y_increase == 1 and 'S' in player_walls:
+            self.trailRenderer.traversal_order.append(self.player_coord.value)
+            self.player_coord.set((
+                self.player_coord.value[0],
+                self.player_coord.value[1] + y_increase # dy
+            ))
+    def search(self, maze:list[list[Cell]], start_cell:Cell, ending_cell:Cell):
+        self.MAZE = maze
+        self.start_cell = start_cell
+        self.ending_cell = ending_cell
+        self.player_coord.set(self.start_cell.coordinate)
+        self.trailRenderer.visited_coords = []
+        self.start()
+
+    def start(self, _=None):
+        print("solving")
+        self.solved = False
+        self.trailRenderer.MAZE = self.MAZE
+        self.player_coord.set(self.start_cell.coordinate)
+        self.trailRenderer.visited_coords = []
+        self.index = 0
+        if CONFIG["SOLVER"].value == "depth_first_search":
+            self.path, self.trailRenderer.traversal_order = depth_first_search(self.MAZE, self.start_cell, self.ending_cell)
+
+        elif CONFIG["SOLVER"].value == "a_star":
+            path, _traversal_order = a_star_search({
+            "start": self.start_cell,
+            "end": self.ending_cell,
+            "graph": matrix_to_edgelist(self.MAZE),
+            })
+            self.path = [] if path == None else [cell.coordinate for cell in path]
+            self.trailRenderer.traversal_order = [cell.coordinate for cell in _traversal_order]
+        elif CONFIG["SOLVER"].value == "breadth_first_search":
+            path, self.trailRenderer.traversal_order = breadth_first_search(matrix_to_edgelist(self.MAZE), self.start_cell, self.ending_cell)
+            self.path = [] if path == None else [cell.coordinate for cell in path]
+        else:
+            raise ValueError(f"Unknown algorithm: {CONFIG['SOLVER']}")
+
+        # Note: The main loop can be optimized by pre-calculating the tile positions
+        self.pathRenderer.calculate(self.path, self.MAZE)
+        self.goalPosition = self.reposition_img(self.ending_cell.X, self.ending_cell.Y, self.GOAL_X_PAD, self.GOAL_Y_PAD)
+        self.flagPosition = self.reposition_img(self.start_cell.X, self.start_cell.Y, self.GOAL_X_PAD, self.GOAL_Y_PAD)
+
+    def loop(self):
+        while self._running:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    pygame.quit()
+
+                if self.PLAYING:
+                    self.PAUSE_BUTTON.listen(event)
+                else:
+                    self.SEARCH_BUTTON.listen(event)
+                self.SKIP_BUTTON.listen(event)
+                self.REGENERATE_BUTTON.listen(event)
+                self.FPS_FIELD.listen(event)
+                for button in self.RADIO_BUTTONS:
+                    button.listen(event)
+                self.save_button.listen(event)
+                self.load_button.listen(event)
+                if event.type == pygame.KEYDOWN:
+                    self.player_movement(int(event.key == pygame.K_d) - int(event.key == pygame.K_a),int(event.key == pygame.K_s) - int(event.key == pygame.K_w))
+
+                # toggle playing on spacebar
+                if event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE:
+                    if self.PLAYING:
+                        self.PLAYING.to_false()
+                    else:
+                        self.start_or_continue()
+
+            # Draw the game screen
+            self.screen.fill((0, 0, 0))
+            # Draw the maze
+            render_maze(
+                self.MAZE,
+                self.width,
+                self.length,
+                self.screen,
+                self.paths,
+                self.reposition_img,
+                lambda cell, position: None
+            )
+            # show the UI for generating
+            if self.PLAYING:
+                self.PAUSE_BUTTON.draw()
+            else:
+                self.SEARCH_BUTTON.draw()
+            self.SKIP_BUTTON.draw()
+            self.REGENERATE_BUTTON.draw()
+            self.screen.blit(self.FPS_LABEL, self.FPS_LABEL_RECT)
+            self.FPS_FIELD.draw()
+            self.save_button.draw()
+            self.load_button.draw()
+            self.P_CELL.draw()
+            # Paint the radio buttosn
+            for button in self.RADIO_BUTTONS:
+                button.draw(self.screen)
+
+            # Draw the trail:
+            self.trailRenderer.render(self.screen)
+            # Draw the highlighted path
+            if self.solved:
+                self.pathRenderer.render(self.screen)
+
+            #Draw the flag
+            self.screen.blit(next(self.flag_sprite), self.flagPosition)
+
+            # Draw the player
+            # TODO: optimize the player and red outline by pre-calculating the tile positions
+            xx,yy = self.reposition_img(self.player_coord.value[0], self.player_coord.value[1], self.PLAYER_X_PAD,self. PLAYER_Y_PAD)
+            self.screen.blit(next(self.PLAYER), (xx,yy))
+            outline_x,outline_y = self.reposition_img(self.player_coord.value[0], self.player_coord.value[1])
+            pygame.draw.rect(self.screen, (255,0,0),(outline_x,outline_y,self.SIZE,self.SIZE ), 6)
+            # Draw a red outline around the tile the player is in
+            # Draw the goal
+            self.screen.blit(
+                next(self.GOAL),
+                self.goalPosition
+            )
+
+            # Update the display
+            pygame.display.flip()
+            # limit FPS
+            pygame.time.Clock().tick(CONFIG['FPS_CAP'])
+
+            if self.PLAYING:
+                self.step()
+    def step(self):
+        """Returns if the generator is done"""
+        if self.trailRenderer.traversal_order and self.index < len(self.trailRenderer.traversal_order):
+            self.player_coord.set(self.trailRenderer.traversal_order[self.index])
+            self.index += 1
+        else:
+            self.PLAYING.to_false()
+            self.index = 0
+            self.traversal_order = []
+            self.player_coord.set(self.ending_cell.coordinate)
+            self.solved = True
+
+    def start_or_continue(self):
+        self.PLAYING.to_true()
+        if self.index == 0:
+            self.start()

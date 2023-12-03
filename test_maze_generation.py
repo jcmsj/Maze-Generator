@@ -10,7 +10,7 @@ def collect_isoleted_cells(maze: list[list[Cell]]):
 class MazeGeneration(unittest.TestCase):
     def test_prim_has_no_isolated_cells(self):
         # Run prim algorithm to get the output
-        start,end, gen, maze = prim(make_initial_maze(30,20))
+        start,end, gen, maze, traversal = prim(make_initial_maze(30,20))
         maze:list[list[Cell]] = []
         # Simply consume the generator
         for _ in gen:
