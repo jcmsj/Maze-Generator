@@ -1,6 +1,6 @@
-
 from Cell import Cell
-from maze import import_maze_details
+from depth_first_search import depth_first_search
+from maze import as_matrix, import_maze_details
 
 def breadth_first_search(graph:dict[Cell, list[Cell]], start:Cell, end:Cell):
     '''Run breath first search on the maze'''
@@ -9,30 +9,37 @@ def breadth_first_search(graph:dict[Cell, list[Cell]], start:Cell, end:Cell):
 
     # Initialize visited set with starting cell
     visited = set([start])
+    matrix = as_matrix(graph)
 
     # Initialize path dictionary with starting cell
     path: dict[Cell, Cell|None] = {start: None}
     traversal:list[tuple[int,int]]  = []
     # Loop until queue is empty or ending cell is found
+    def backtrack(cell:Cell):
+        path_list:list[Cell] = [cell]
+        while path[path_list[-1]] != None:
+            path_list.append(path[path_list[-1]]) # type: ignore
+        path_list.reverse()
+        return path_list
+
+    prev_start =  start
     while queue:
         # Get next cell from queue
         current_cell = queue.pop(0)
-        traversal.append(current_cell.coordinate)
+        # do a dfs from the previous to the current cell
+        subpath, _ = depth_first_search(matrix, prev_start, current_cell)
+        traversal.extend(subpath)
+        prev_start = current_cell
         # Check if current cell is the ending cell
         if current_cell == end:
-            # Build path from ending cell to starting cell
-            path_list:list[Cell] = [end]
-            while path[path_list[-1]] is not None:
-                path_list.append(path[path_list[-1]]) # type: ignore
-            path_list.reverse()
-            return path_list, traversal
+            return backtrack(current_cell), traversal
 
         # Add unvisited neighbors to queue and visited set
-        for neighbor in graph[current_cell]:
-            if neighbor not in visited:
-                queue.append(neighbor)
-                visited.add(neighbor)
-                path[neighbor] = current_cell
+        for child in graph[current_cell]:
+            if child not in visited:
+                queue.append(child)
+                visited.add(child)   
+                path[child] = current_cell
 
     # If ending cell was not found, return None
     return [], traversal
