@@ -20,7 +20,7 @@ class Val[T]:
 
     def __hash__(self):
         return hash(self._val)
-    def set(self, val):
+    def set(self, val:T):
         self._val = val
         for observer in self.observers:
             observer(self._val)

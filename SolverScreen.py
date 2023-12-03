@@ -5,6 +5,7 @@ from Cell import Cell
 from Colors import Colors
 from Direction import Direction
 from Fonts import Fonts
+from State import State
 from a_star import a_star_search
 from breadth_first_search import breadth_first_search
 from depth_first_search import depth_first_search
@@ -13,27 +14,23 @@ from render_maze import render_maze, tile_position
 from widgets import BoolVal, Button, RadioButton, Text, TextField, Val
 import pygame
 
-def neighbor_at(
-    MAZE:list[list[Cell]],
-    cell:Cell,
-    direction:Direction
-):
-    dx,dy = direction.value
-    return MAZE[cell.Y + dy][cell.X + dx]
 def calc_direction(
     MAZE: list[list[Cell]],
     to:tuple[int,int], 
     traversal_order: list[tuple[int,int]]
 ):
-    target = MAZE[to[1]][to[0]]
-    # get neighboring cells
-    neighbors = [(d,neighbor_at(MAZE, target, Direction(d))) for d in target.visited_walls()]
-    for direction,neighbor in neighbors:
-        # from the end, check if the coordinate exists
-        for i in range(len(traversal_order)-1, -1, -1):
-            if traversal_order[i] == neighbor.coordinate:
-                #  if it does, use the inverse
-                return direction.inverse()
+    # Check the maze for t
+    TARGET = MAZE[to[1]][to[0]]
+    for coord in traversal_order:
+        cell = MAZE[coord[1]][coord[0]]
+        dx = TARGET.coordinate[0] - cell.coordinate[0]
+        dy = TARGET.coordinate[1] - cell.coordinate[1]
+        if abs(dx) == abs(dy) or abs(dx) > 1 or abs(dy) > 1:
+            continue
+        dir = Direction((dx,dy))
+        if cell.walls[dir] == State.VISITED:
+            return dir
+    return None
 
 class HighlightedPathRender:
     def __init__(
@@ -66,6 +63,27 @@ class HighlightedPathRender:
             self.reposition_img(*path[i], self.PATH_PAD_X, self.PATH_PAD_Y), calc_direction(maze,path[i], path)) for i in range(len(path))
         ]
 
+class PlayerRenderer:
+    def __init__(
+            self,
+            SIZE:int,
+            PLAYER_X_PAD:int,
+            PLAYER_Y_PAD:int,
+            reposition_img:Callable[[int,int, int,int],tuple[int,int]],
+        ):
+        self.SIZE = SIZE
+        self.X_PAD = PLAYER_X_PAD
+        self.Y_PAD = PLAYER_Y_PAD
+        self.sprite = animator("assets/ekko/idle/ekkoidle", "png", 8, (SIZE))
+        self.coord: Val[tuple[int,int]] = Val((-1,-1))
+        self.scaled_coord = (-1,-1)
+        self.coord.observers.append(self.scale)
+        self.reposition_img = reposition_img
+
+    def scale(self, coord:tuple[int,int]):
+        self.scaled_coord = self.reposition_img(coord[0], coord[1], self.X_PAD,self.Y_PAD)
+    def render(self, screen:pygame.Surface):
+        screen.blit(next(self.sprite), self.scaled_coord)
 class TrailRenderer:
     def __init__(
             self,
@@ -114,6 +132,8 @@ class TrailRenderer:
     def skip(self):
         for coord in self.traversal_order:
             self.add_visited_coords(coord)
+        self.traversal_order = []
+
 class SolverScreen:
     def __init__(
         self,
@@ -144,13 +164,9 @@ class SolverScreen:
         self.load_button = load_button
         self._running = True
         self.index = 0
-        self.PLAYER = animator("assets/ekko/idle/ekkoidle", "png", 8, (SIZE-30))
         self.GOAL = animator("assets/goal/goal", "gif", 4, (SIZE-45))
-
-        self.PLAYER_X_PAD = 14
-        self.PLAYER_Y_PAD = 3
+        self.PLAYER = PlayerRenderer(SIZE-30, 14, 3, self.reposition_img)
         self.GOAL_X_PAD = 23
-        self.player_coord:Val[tuple[int,int]]= Val((-1,-1))
         self.GOAL_Y_PAD = 8
         self.RADIO_BUTTONS = [
             RadioButton(
@@ -225,13 +241,13 @@ class SolverScreen:
 
         self.P_CELL = TextField(
             screen,
-            self.player_coord.value.__repr__(),
+            self.PLAYER.coord.value.__repr__(),
             self.reposition_img(16.5,5),
             Fonts.textFont,
             Colors.WHITE,
             Colors.BLACK,
         )
-        self.player_coord.observers.append(lambda v: self.P_CELL.update(v.__repr__()))
+        self.PLAYER.coord.observers.append(lambda v: self.P_CELL.update(v.__repr__()))
         self.FPS_FIELD = FPS_FIELD
         self.FPS_LABEL =  FPS_LABEL
         self.FPS_LABEL_RECT = FPS_LABEL_RECT
@@ -251,12 +267,12 @@ class SolverScreen:
             self.MAZE,
             self.SIZE-40,
             self.reposition_img,
-            (self.PLAYER_X_PAD+8, self.PLAYER_Y_PAD + 15)
+            (self.PLAYER.X_PAD+8, self.PLAYER.Y_PAD + 15)
         )
-        self.player_coord.observers.append(self.trailRenderer.add_visited_coords)
+        self.PLAYER.coord.observers.append(self.trailRenderer.add_visited_coords)
         self.pathRenderer = HighlightedPathRender(
             self.SIZE-40,
-            (self.PLAYER_X_PAD+8, self.PLAYER_Y_PAD + 15),
+            (self.PLAYER.X_PAD+8, self.PLAYER.Y_PAD + 15),
             self.reposition_img) # type: ignore
 
     def end(self):
@@ -266,30 +282,29 @@ class SolverScreen:
         self.PLAYING.to_false()
         self.index = 0
         self.trailRenderer.skip()
-        self.trailRenderer.traversal_order = []
-        self.player_coord.set((self.ending_cell.coordinate))
+        self.PLAYER.coord.set(self.ending_cell.coordinate)
         self.solved = True
     def player_movement(self,x_increase, y_increase):
-        player_walls = [str(d) for d in self.MAZE[self.player_coord.value[1]][self.player_coord.value[0]].visited_walls()]
+        player_walls = [str(d) for d in self.MAZE[self.PLAYER.coord.value[1]][self.PLAYER.coord.value[0]].visited_walls()]
         if x_increase == -1 and 'W' in player_walls or x_increase == 1 and 'E' in player_walls:
             # add the current position to the traversal order
-            self.trailRenderer.traversal_order.append(self.player_coord.value)
-            self.player_coord.set((
-                self.player_coord.value[0] + x_increase, # dx
-                self.player_coord.value[1])
+            self.trailRenderer.traversal_order.append(self.PLAYER.coord.value)
+            self.PLAYER.coord.set((
+                self.PLAYER.coord.value[0] + x_increase, # dx
+                self.PLAYER.coord.value[1])
             )
 
         if y_increase == -1 and 'N' in player_walls or y_increase == 1 and 'S' in player_walls:
-            self.trailRenderer.traversal_order.append(self.player_coord.value)
-            self.player_coord.set((
-                self.player_coord.value[0],
-                self.player_coord.value[1] + y_increase # dy
+            self.trailRenderer.traversal_order.append(self.PLAYER.coord.value)
+            self.PLAYER.coord.set((
+                self.PLAYER.coord.value[0],
+                self.PLAYER.coord.value[1] + y_increase # dy
             ))
     def search(self, maze:list[list[Cell]], start_cell:Cell, ending_cell:Cell):
         self.MAZE = maze
         self.start_cell = start_cell
         self.ending_cell = ending_cell
-        self.player_coord.set(self.start_cell.coordinate)
+        self.PLAYER.coord.set(self.start_cell.coordinate)
         self.trailRenderer.visited_coords = []
         self.start()
 
@@ -297,7 +312,7 @@ class SolverScreen:
         print("solving")
         self.solved = False
         self.trailRenderer.MAZE = self.MAZE
-        self.player_coord.set(self.start_cell.coordinate)
+        self.PLAYER.coord.set(self.start_cell.coordinate)
         self.trailRenderer.visited_coords = []
         self.index = 0
         if CONFIG["SOLVER"].value == "depth_first_search":
@@ -387,11 +402,10 @@ class SolverScreen:
             self.screen.blit(next(self.flag_sprite), self.flagPosition)
 
             # Draw the player
-            # TODO: optimize the player and red outline by pre-calculating the tile positions
-            xx,yy = self.reposition_img(self.player_coord.value[0], self.player_coord.value[1], self.PLAYER_X_PAD,self. PLAYER_Y_PAD)
-            self.screen.blit(next(self.PLAYER), (xx,yy))
-            outline_x,outline_y = self.reposition_img(self.player_coord.value[0], self.player_coord.value[1])
-            pygame.draw.rect(self.screen, (255,0,0),(outline_x,outline_y,self.SIZE,self.SIZE ), 6)
+            self.PLAYER.render(self.screen)
+            # Draw a red outline
+            outline_x,outline_y = self.reposition_img(self.PLAYER.coord.value[0], self.PLAYER.coord.value[1])
+            pygame.draw.rect(self.screen, Colors.RED,(outline_x,outline_y,self.SIZE,self.SIZE ), 6)
             # Draw a red outline around the tile the player is in
             # Draw the goal
             self.screen.blit(
@@ -409,13 +423,13 @@ class SolverScreen:
     def step(self):
         """Returns if the generator is done"""
         if self.trailRenderer.traversal_order and self.index < len(self.trailRenderer.traversal_order):
-            self.player_coord.set(self.trailRenderer.traversal_order[self.index])
+            self.PLAYER.coord.set(self.trailRenderer.traversal_order[self.index])
             self.index += 1
         else:
             self.PLAYING.to_false()
             self.index = 0
             self.traversal_order = []
-            self.player_coord.set(self.ending_cell.coordinate)
+            self.PLAYER.coord.set(self.ending_cell.coordinate)
             self.solved = True
 
     def start_or_continue(self):
