@@ -406,7 +406,7 @@ class SolverScreen:
                 self.PLAYER.coord.value[1])
             )
 
-        if y_increase == -1 and 'N' in player_walls or y_increase == 1 and 'S' in player_walls:
+        elif y_increase == -1 and 'N' in player_walls or y_increase == 1 and 'S' in player_walls:
             self.trailRenderer.traversal_order.append(self.PLAYER.coord.value)
             self.PLAYER.coord.set((
                 self.PLAYER.coord.value[0],
@@ -495,14 +495,13 @@ class SolverScreen:
                     if event.key == pygame.K_d:
                         self.PLAYER.right_pressed = False
                 
-                self.player_movement(int(self.PLAYER.right_pressed) - int(self.PLAYER.left_pressed),int(self.PLAYER.down_pressed) - int(self.PLAYER.up_pressed))
-
                 # toggle playing on spacebar
                 if event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE:
                     if self.PLAYING:
                         self.PLAYING.to_false()
                     else:
                         self.start_or_continue()
+            self.player_movement(int(self.PLAYER.right_pressed) - int(self.PLAYER.left_pressed),int(self.PLAYER.down_pressed) - int(self.PLAYER.up_pressed))
 
             # Draw the game screen
             self.screen.fill((0, 0, 0))
