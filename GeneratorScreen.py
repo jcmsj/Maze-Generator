@@ -46,19 +46,20 @@ class GeneratorScreen:
         self.FPS_FIELD = FPS_FIELD
         self.FPS_LABEL = FPS_LABEL
         self.FPS_LABEL_RECT = FPS_LABEL_RECT
+
         self.RADIO_BUTTONS = [
             RadioButton(
                 text = 'Random DFS',
                 assigned = "random_dfs",
-                x = 150,
-                y = 615,
+                x = self.reposition_img(0.5, 8.3)[0], # type: ignore
+                y = self.reposition_img(0.5, 8.3)[1], # type: ignore
                 checked=True
             ),
             RadioButton(
                 text = 'Prim',
                 assigned = 'prim',
-                x = 400,
-                y = 615,
+                x = self.reposition_img(2.5, 8.3)[0], # type: ignore
+                y = self.reposition_img(2.5, 8.3)[1], # type: ignore
             ),
         ]
 

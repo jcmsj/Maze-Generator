@@ -20,7 +20,7 @@ class Val[T]:
 
     def __hash__(self):
         return hash(self._val)
-    def set(self, val:T):
+    def set(self, val):
         self._val = val
         for observer in self.observers:
             observer(self._val)
@@ -50,7 +50,17 @@ class BoolVal(Val[bool]):
         return self._val
     
 class TextField:
-    def __init__(self, screen, text:str,location: tuple[int,int], font:pygame.font.Font, color:tuple[int,int,int], background_color:tuple[int,int,int], onSubmit: Callable[[str], None|bool] | None = None  ):
+    def __init__(
+            self, 
+            screen, 
+            text:str,
+            location: tuple[int,int], 
+            font:pygame.font.Font, 
+            color:tuple[int,int,int], 
+            background_color:tuple[int,int,int], 
+            onSubmit: Callable[[str], None|bool] | None = None,
+            onFocus: Callable[[], None] | None = None,
+        ):
         """
         Represents a text field on the screen.
 
@@ -76,6 +86,7 @@ class TextField:
         self.focused = False
         self.onSubmit = onSubmit
         self.previous_text = self.text
+        self.onFocus = onFocus
 
     def draw(self):
         """
@@ -107,6 +118,8 @@ class TextField:
             self.focused = self.textRect.collidepoint(event.pos)
             if self.focused:
                 self.previous_text = self.text
+                if self.onFocus is not None:
+                    self.onFocus()
                 print("TextField: Onfocused")
 
         if self.focused and event.type == pygame.KEYDOWN:
@@ -121,9 +134,9 @@ class TextField:
                     should_reject = self.onSubmit(self.text)
                     if should_reject:
                         self.update(self.previous_text)
-            if event.key == pygame.K_BACKSPACE:
+            elif event.key == pygame.K_BACKSPACE:
                 self.update(self.text[:-1])
-            elif event.unicode.isalnum():
+            else:
                 self.update(self.text + event.unicode)
 
 class Text:
