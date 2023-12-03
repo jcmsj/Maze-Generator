@@ -26,8 +26,11 @@ def breadth_first_search(graph:dict[Cell, list[Cell]], start:Cell, end:Cell):
     while queue:
         # Get next cell from queue
         current_cell = queue.pop(0)
-        # do a dfs from the previous to the current cell
+        # Purely to show the movement from the current child to the previously visited node, do a dfs
         subpath, _ = depth_first_search(matrix, prev_start, current_cell)
+        if subpath:
+            # we dont need current cell in the subpath, it will be included in the next subpath
+            subpath.pop()
         traversal.extend(subpath)
         prev_start = current_cell
         # Check if current cell is the ending cell
