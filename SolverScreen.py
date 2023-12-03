@@ -133,7 +133,51 @@ class TrailRenderer:
         for coord in self.traversal_order:
             self.add_visited_coords(coord)
         # self.traversal_order = []
+class CoordinateField:
+    def __init__(
+        self,
+        screen:pygame.Surface,
+        text:str,
+        position:tuple[int,int],
+        font:pygame.font.Font,
+        color:tuple[int,int,int],
+        background:tuple[int,int,int],
+        MAZE:list[list[Cell]],
+        onCoordChange:Callable[[tuple[int,int]],None]
+    ):
+        self.MAZE = MAZE
+        self.screen = screen
+        self.lastValid = text
+        self.tupleField = TextField(
+            screen,
+            text,
+            position,
+            font,
+            color,
+            background,
+            onSubmit=self.parse,
+        )
+        self.onCoordChange = onCoordChange
+    def revert(self):
+        self.tupleField.update(self.lastValid)
+    def parse(self, text:str):
+        text = text.strip(")")
+        text = text.strip("(")
+        try:
+            (input_x, input_y) = tuple(int(s) for s in text.split(","))
+        except ValueError:
+            self.revert()
+            return True
+        if input_x < 0 or input_x >= len(self.MAZE[0]) or input_y < 0 or input_y >= len(self.MAZE):
+            self.revert()
+            return True
+        self.onCoordChange((input_x, input_y))
+        return False
+    def draw(self):
+        self.tupleField.draw()
 
+    def listen(self, event):
+        self.tupleField.listen(event)
 class SolverScreen:
     def __init__(
         self,
@@ -172,21 +216,21 @@ class SolverScreen:
             RadioButton(
                 assigned = "a_star",
                 text = 'A*',
-                x = 150,
-                y = 615,
+                x = self.reposition_img(0.5, 7)[0],
+                y = self.reposition_img(0.5, 8.3)[1],
             ),
             RadioButton(
                 assigned = 'breadth_first_search',
-                text = 'BFS',
-                x = 400,
-                y = 615,
+                text = 'Breadth First Search',
+                x = self.reposition_img(1.3, 7)[0],
+                y = self.reposition_img(0.5, 8.3)[1],
                 checked = True
             ),
             RadioButton(
                 assigned = 'depth_first_search',
-                text = 'DFS',
-                x = 650,
-                y = 615,
+                text = 'Depth First Search',
+                x = self.reposition_img(4, 7)[0],
+                y = self.reposition_img(0.5, 8.3)[1],
             )
         ]
 
@@ -317,6 +361,28 @@ class SolverScreen:
                 Colors.BLACK,
             ),
         )
+        self.START_CELL_LABEL = Text("Start:", self.screen, Fonts.textFont, self.reposition_img(7.5, 8.5), Colors.WHITE, Colors.BLACK)
+        self.START_CELL_FIELD = CoordinateField(
+            screen,
+            "",
+            self.reposition_img(8.5, 8.5), # type: ignore
+            Fonts.textFont,
+            Colors.WHITE,
+            Colors.BLACK,
+            self.MAZE,
+            lambda newStart: self.search(self.MAZE, self.MAZE[newStart[1]][newStart[0]], self.ending_cell)
+        )
+        self.END_CELL_LABEL = Text("Goal:", self.screen, Fonts.textFont, self.reposition_img(10, 8.5), Colors.WHITE, Colors.BLACK)
+        self.ENDING_CELL_FIELD = CoordinateField(
+            screen,
+            "",
+            self.reposition_img(11, 8.5), # type: ignore
+            Fonts.textFont,
+            Colors.WHITE,
+            Colors.BLACK,
+            self.MAZE,
+            lambda newEnd: self.search(self.MAZE, self.start_cell, self.MAZE[newEnd[1]][newEnd[0]])
+        )
     def end(self):
         self._running = False
         self.solved = False
@@ -357,6 +423,9 @@ class SolverScreen:
         self.PLAYER.coord.set(self.start_cell.coordinate)
         self.trailRenderer.visited_coords = []
         self.index = 0
+        # Update the field coordinates
+        self.START_CELL_FIELD.tupleField.update(self.start_cell.coordinate.__repr__())
+        self.ENDING_CELL_FIELD.tupleField.update(self.ending_cell.coordinate.__repr__())
         if CONFIG["SOLVER"].value == "depth_first_search":
             self.path, self.trailRenderer.traversal_order = depth_first_search(self.MAZE, self.start_cell, self.ending_cell)
 
@@ -391,7 +460,8 @@ class SolverScreen:
                     self.RESTART_BUTTON.listen(event)
                 else:
                     self.SEARCH_BUTTON.listen(event)
-
+                self.START_CELL_FIELD.listen(event)
+                self.ENDING_CELL_FIELD.listen(event)
                 if not self.solved:
                     self.NEXT_STEP.listen(event)
                 self.PREVIOUS_STEP.listen(event)
@@ -432,6 +502,7 @@ class SolverScreen:
             else:
                 self.SEARCH_BUTTON.draw()
             self.NEXT_STEP.draw()
+
             self.PREVIOUS_STEP.draw()
             self.STEP_LABEL.draw()
             self.SKIP_BUTTON.draw()
@@ -441,6 +512,13 @@ class SolverScreen:
             self.save_button.draw()
             self.load_button.draw()
             self.P_CELL.draw()
+
+            # Coordinate changing
+            self.START_CELL_FIELD.draw()
+            self.ENDING_CELL_FIELD.draw()
+            self.START_CELL_LABEL.draw()
+            self.END_CELL_LABEL.draw()
+
             # Paint the radio buttosn
             for button in self.RADIO_BUTTONS:
                 button.draw(self.screen)
