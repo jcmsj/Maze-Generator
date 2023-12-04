@@ -1,6 +1,7 @@
 from queue import PriorityQueue
 from Cell import Cell
-from maze import import_maze_details
+from depth_first_search import depth_first_search
+from maze import as_matrix, import_maze_details
 
 from queue import PriorityQueue
 
@@ -15,20 +16,23 @@ def a_star_search(maze_info):
     maze:dict[Cell,list[Cell]] = maze_info['graph']
 
     # Initialize priority queue with starting cell
-    queue = PriorityQueue()
+    queue: PriorityQueue[tuple[int,Cell]] = PriorityQueue()
     queue.put((0, starting_cell))
-
 
     cost_so_far: dict[Cell, int] = {starting_cell: 0}
     path: dict[Cell, Cell|None] = {starting_cell: None}
-    visited_cells: list[Cell] = []
-
-
+    visited_cells = [starting_cell.coordinate]
+    matrix = as_matrix(maze)
+    marker = starting_cell
     while not queue.empty():
-  
         _, current_cell= queue.get()
+        subpath, _ = depth_first_search(matrix, marker, current_cell)
+        subpath.pop()
+        visited_cells.extend(subpath)
+        marker = current_cell
+
         if current_cell == ending_cell:
-            visited_cells.append(current_cell)
+            visited_cells.append(current_cell.coordinate)
             path_list:list[Cell] = [ending_cell]
             while path[path_list[-1]] is not None:
                 path_list.append(path[path_list[-1]]) # type: ignore since the check above is not None
@@ -36,13 +40,11 @@ def a_star_search(maze_info):
             return path_list, visited_cells
         for neighbor in maze[current_cell]:
             new_cost = cost_so_far[current_cell] + 1
-            visited_cells.append(neighbor)
             if neighbor not in cost_so_far or new_cost < cost_so_far[neighbor]:
                 cost_so_far[neighbor] = new_cost
                 priority = new_cost + heuristic(ending_cell, neighbor)
                 queue.put((priority, neighbor))  
                 path[neighbor] = current_cell
-                # if neighbor not in visited_cells: 
                
     # If ending cell was not found, return None
     return None, visited_cells

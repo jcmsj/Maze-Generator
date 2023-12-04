@@ -434,13 +434,12 @@ class SolverScreen:
             self.path, self.trailRenderer.traversal_order = depth_first_search(self.MAZE, self.start_cell, self.ending_cell)
 
         elif CONFIG["SOLVER"].value == "a_star":
-            path, _traversal_order = a_star_search({
+            path, self.trailRenderer.traversal_order = a_star_search({
             "start": self.start_cell,
             "end": self.ending_cell,
             "graph": matrix_to_edgelist(self.MAZE),
             })
             self.path = [] if path == None else [cell.coordinate for cell in path]
-            self.trailRenderer.traversal_order = [cell.coordinate for cell in _traversal_order]
         elif CONFIG["SOLVER"].value == "breadth_first_search":
             path, self.trailRenderer.traversal_order = breadth_first_search(matrix_to_edgelist(self.MAZE), self.start_cell, self.ending_cell)
             self.path = [] if path == None else [cell.coordinate for cell in path]
